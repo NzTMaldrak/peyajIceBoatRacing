@@ -2,226 +2,408 @@ package peyaj;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Vehicle;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.vehicle.VehicleEntityCollisionEvent;
-import org.bukkit.event.vehicle.VehicleExitEvent;
+import org.bukkit.event.vehicle.VehicleBlockCollisionEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.Vector;
+import peyaj.arena.RaceState;
+import peyaj.cosmetics.EditMode;
 
 public class RaceListener implements Listener {
 
     private final IceBoatRacing plugin;
-    private final Map<UUID, Long> jumpCooldowns = new HashMap<>();
 
     public RaceListener(IceBoatRacing plugin) {
         this.plugin = plugin;
     }
 
-    // --- PREVENT MOVING RESET ITEM ---
     @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
-        // If player is in a race, prevent moving hotbar items (Compass/Reset)
-        if (event.getWhoClicked() instanceof Player p && plugin.isRacer(p.getUniqueId())) {
-            // Simple check: prevent any movement in inventory while racing to keep items in place
-            // Or more specific: check for the items
-            ItemStack item = event.getCurrentItem();
-            if (item != null && item.hasItemMeta()) {
-                String name = PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName());
-                if (name.contains("Race Menu") || name.contains("Reset Run")) {
-                    event.setCancelled(true);
+    public void onInventoryClick(InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p))
+            return;
+
+        // Cancel all inventory clicks for racers to prevent moving lobby/spectator
+        // items
+        if (plugin.isRacer(p.getUniqueId())) {
+            e.setCancelled(true);
+        }
+
+        ItemStack clicked = e.getCurrentItem();
+        if (clicked == null || clicked.getItemMeta() == null)
+            return;
+
+        if (clicked.getType() == Material.RED_DYE) {
+            String displayName = clicked.getItemMeta().displayName() != null
+                    ? net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                            .serialize(clicked.getItemMeta().displayName())
+                    : "";
+            if (displayName.contains("Reset Run")) {
+                RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+                if (arena != null && arena.isTimeTrial()) {
+                    arena.resetTimeTrial(p);
+                    e.setCancelled(true);
                 }
             }
         }
     }
 
-    // --- CHAT: Arena Creation ---
     @EventHandler
-    public void onChat(AsyncPlayerChatEvent event) {
-        Player p = event.getPlayer();
-        String mode = plugin.inputMode.get(p.getUniqueId());
-        if (mode == null || !mode.equals("CREATE_ARENA")) return;
-
-        event.setCancelled(true);
-        String msg = event.getMessage().trim();
-        plugin.inputMode.remove(p.getUniqueId());
-
-        if (msg.equalsIgnoreCase("cancel")) {
-            p.sendMessage(Component.text("Creation cancelled.", NamedTextColor.YELLOW));
-            plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guiManager.openAdminPanel(p));
-            return;
-        }
-
-        if (msg.contains(" ") || plugin.getArena(msg) != null) {
-            p.sendMessage(Component.text("Invalid name or already exists.", NamedTextColor.RED));
-            return;
-        }
-
-        RaceArena newArena = new RaceArena(msg.toLowerCase(), plugin);
-        plugin.addArena(newArena.getName(), newArena);
-        plugin.saveArenas();
-
-        p.sendMessage(Component.text("Arena '" + newArena.getName() + "' created!", NamedTextColor.GREEN));
-        // Switch back to main thread for GUI
-        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guiManager.openRaceTypeSelector(p, newArena.getName()));
-    }
-
-    // --- PHYSICS: Auto-Climb ---
-    @EventHandler
-    public void onBoatMove(VehicleMoveEvent event) {
-        if (!(event.getVehicle() instanceof Boat boat) || !(boat.getPassengers().getFirst() instanceof Player p)) return;
-        if (!plugin.isRacer(p.getUniqueId())) return;
-
-        if (boat.getVelocity().length() < 0.1) return;
-
-        // Check block in front
-        Block front = boat.getLocation().add(boat.getLocation().getDirection()).getBlock();
-        if (!front.getType().isAir() && !front.isPassable()) {
-            boat.setVelocity(boat.getVelocity().setY(0.5)); // Small hop up
+    public void onPlayerDamage(org.bukkit.event.entity.EntityDamageEvent e) {
+        if (e.getEntity() instanceof Player p) {
+            RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+            if (arena != null && arena.getState() == RaceState.ACTIVE) {
+                e.setCancelled(true);
+            }
         }
     }
 
-    // --- PHYSICS: Boat Jump/Stacking ---
     @EventHandler
-    public void onBoatCollision(VehicleEntityCollisionEvent event) {
-        if (!(event.getVehicle() instanceof Boat boat) || !(boat.getPassengers().getFirst() instanceof Player p)) return;
+    public void onFoodLevelChange(org.bukkit.event.entity.FoodLevelChangeEvent e) {
+        if (e.getEntity() instanceof Player p) {
+            RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+            if (arena != null && arena.getState() != RaceState.LOBBY) {
+                e.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(org.bukkit.event.block.BlockBreakEvent e) {
+        if (plugin.isRacer(e.getPlayer().getUniqueId())) {
+            e.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
+        if (plugin.isRacer(e.getPlayer().getUniqueId())) {
+            e.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onItemDrop(org.bukkit.event.player.PlayerDropItemEvent e) {
+        if (plugin.isRacer(e.getPlayer().getUniqueId())) {
+            e.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerCommand(org.bukkit.event.player.PlayerCommandPreprocessEvent e) {
+        Player p = e.getPlayer();
+        if (plugin.isRacer(p.getUniqueId())) {
+            String cmd = e.getMessage().toLowerCase();
+            if (!cmd.startsWith("/race") && !cmd.startsWith("/iceboat") && !cmd.startsWith("/checkpoint")
+                    && !cmd.startsWith("/cp") && !cmd.startsWith("/stuck")) {
+                if (!p.hasPermission("race.admin")) {
+                    e.setCancelled(true);
+                    p.sendMessage(Component.text("You cannot use other commands while in a race!", NamedTextColor.RED));
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerTeleport(org.bukkit.event.player.PlayerTeleportEvent e) {
+        if (plugin.isRacer(e.getPlayer().getUniqueId())) {
+            if (e.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.ENDER_PEARL ||
+                    e.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.CHORUS_FRUIT) {
+                e.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onChat(AsyncPlayerChatEvent e) {
+        Player p = e.getPlayer();
+        if (!plugin.inputMode.containsKey(p.getUniqueId()))
+            return;
+
+        String mode = plugin.inputMode.remove(p.getUniqueId());
+        e.setCancelled(true);
+        String input = e.getMessage();
+
+        if (mode.equals("create_arena")) {
+            String name = input.replace(" ", "_");
+            if (name.isEmpty()) {
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> p.sendMessage(Component.text("Arena name cannot be empty!", NamedTextColor.RED)));
+                return;
+            }
+            if (plugin.getArena(name) != null) {
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> p.sendMessage(Component.text("Arena already exists!", NamedTextColor.RED)));
+                return;
+            }
+
+            RaceArena arena = new RaceArena(name, plugin);
+            plugin.addArena(name, arena);
+            plugin.editorArena.put(p.getUniqueId(), name);
+            plugin.editorMode.put(p.getUniqueId(), EditMode.SPAWN);
+
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                p.sendMessage(Component.text("Arena '" + name + "' created! Use the Race Wand to set it up.",
+                        NamedTextColor.GREEN));
+                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1.5f);
+            });
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onBoatMove(VehicleMoveEvent e) {
+        if (!(e.getVehicle() instanceof Boat boat))
+            return;
+        if (boat.getPassengers().isEmpty())
+            return;
+        if (!(boat.getPassengers().get(0) instanceof Player))
+            return;
+
+        // Auto-climb logic
+        Vector velocity = boat.getVelocity();
+        double speed = velocity.clone().setY(0).length();
+        if (speed < 0.05)
+            return;
+
+        Location from = e.getFrom();
+        Location to = e.getTo();
+        Vector direction = to.toVector().subtract(from.toVector()).normalize();
+
+        Location frontCheck = to.clone().add(direction.clone().multiply(1.2));
+        Block frontBlock = frontCheck.getBlock();
+        Block belowFront = frontCheck.clone().add(0, -1, 0).getBlock();
+        Block twoAbove = frontCheck.clone().add(0, 2, 0).getBlock();
+
+        boolean blockInFront = frontBlock.getType().isSolid();
+        boolean supportBelow = belowFront.getType().isSolid();
+        boolean spaceAbove = twoAbove.getType().isAir();
+
+        if (blockInFront && supportBelow && spaceAbove) {
+            double boostPower = 0.6 + (speed * 0.3);
+            boat.setVelocity(velocity.clone().setY(boostPower).add(direction.multiply(0.2)));
+        }
+    }
+
+    @EventHandler
+    public void onBoatCollision(VehicleBlockCollisionEvent e) {
+        if (!(e.getVehicle() instanceof Boat boat))
+            return;
+        if (boat.getPassengers().isEmpty() || !(boat.getPassengers().get(0) instanceof Player))
+            return;
+
+        Block block = e.getBlock();
+        Vector direction = boat.getLocation().getDirection().clone().setY(0).normalize();
+        Location checkAbove = block.getLocation().add(0.5, 1, 0.5).add(direction.clone().multiply(0.3));
+
+        Block blockAbove = checkAbove.getBlock();
+        Block twoAbove = checkAbove.clone().add(0, 1, 0).getBlock();
+
+        if (!blockAbove.getType().isSolid() && twoAbove.getType().isAir()) {
+            Vector vel = boat.getVelocity();
+            double horizontalSpeed = vel.clone().setY(0).length();
+            double boostPower = 0.55 + (horizontalSpeed * 0.4);
+            boat.setVelocity(vel.clone().setY(boostPower).add(direction.multiply(0.15)));
+        }
+    }
+
+    @EventHandler
+    public void onDismount(EntityDismountEvent e) {
+        if (!(e.getEntity() instanceof Player p))
+            return;
+        if (!(e.getDismounted() instanceof Boat))
+            return;
 
         RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
-        if (arena == null || arena.getState() != RaceArena.RaceState.ACTIVE) return;
-
-        event.setCollisionCancelled(true);
-        event.setCancelled(true);
-
-        // If hitting another boat, jump over it
-        if (event.getEntity() instanceof Boat && System.currentTimeMillis() - jumpCooldowns.getOrDefault(p.getUniqueId(), 0L) > 500) {
-            if (boat.getVelocity().length() > 0.2) {
-                boat.setVelocity(boat.getVelocity().setY(0.6));
-                jumpCooldowns.put(p.getUniqueId(), System.currentTimeMillis());
-                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_ATTACK_SWEEP, 0.5f, 2f);
-            }
+        if (arena == null)
+            return;
+        if (arena.getState() == RaceState.ACTIVE && !arena.isSpectator(p.getUniqueId())) {
+            e.setCancelled(true);
         }
     }
 
-    // --- GAMEPLAY: Prevent Exit ---
     @EventHandler
-    public void onVehicleExit(VehicleExitEvent event) {
-        if (event.getExited() instanceof Player p && plugin.isRacer(p.getUniqueId())) {
-            RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
-            if (arena != null && arena.getState() == RaceArena.RaceState.ACTIVE) {
-                event.setCancelled(true);
-                p.sendMessage(Component.text("You cannot exit the boat!", NamedTextColor.RED));
+    public void onVehicleDamage(org.bukkit.event.vehicle.VehicleDamageEvent e) {
+        if (e.getVehicle() instanceof Boat boat && !boat.getPassengers().isEmpty()) {
+            if (boat.getPassengers().get(0) instanceof Player p) {
+                if (plugin.isRacer(p.getUniqueId())) {
+                    e.setCancelled(true);
+                }
             }
         }
     }
 
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        Player p = event.getPlayer();
-        plugin.inputMode.remove(p.getUniqueId());
-        jumpCooldowns.remove(p.getUniqueId());
+    public void onVehicleDestroy(org.bukkit.event.vehicle.VehicleDestroyEvent e) {
+        if (e.getVehicle() instanceof Boat boat && !boat.getPassengers().isEmpty()) {
+            if (boat.getPassengers().get(0) instanceof Player p) {
+                if (plugin.isRacer(p.getUniqueId())) {
+                    e.setCancelled(true);
+                }
+            }
+        }
+    }
 
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent e) {
+        Player p = e.getPlayer();
         RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
         if (arena != null) {
             arena.removePlayer(p);
-            plugin.removePlayerFromArenaMap(p.getUniqueId());
         }
+        plugin.editorArena.remove(p.getUniqueId());
+        plugin.editorMode.remove(p.getUniqueId());
+        plugin.activeVisualizers.remove(p.getUniqueId());
+        plugin.inputMode.remove(p.getUniqueId());
+        plugin.partyManager.handlePlayerQuit(p.getUniqueId());
     }
 
-    // --- ADMIN TOOLS & RESET ITEM ---
     @EventHandler
-    public void onInteract(PlayerInteractEvent event) {
-        Player p = event.getPlayer();
-        ItemStack item = event.getItem();
-        if (item == null || !item.hasItemMeta()) return;
+    public void onPlayerInteract(PlayerInteractEvent e) {
+        Player p = e.getPlayer();
+        ItemStack item = e.getItem();
 
-        String name = PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName());
+        if (item == null || item.getItemMeta() == null)
+            return;
 
-        if (item.getType() == Material.BLAZE_ROD && name.contains("Race Wand")) {
-            event.setCancelled(true);
-            handleWand(p, event.getAction(), event.getClickedBlock() != null ? event.getClickedBlock().getLocation() : null);
-        } else if (item.getType() == Material.COMPASS && name.contains("Race Menu")) {
-            event.setCancelled(true);
-            plugin.guiManager.openMainMenu(p);
-        } else if (item.getType() == Material.RED_DYE && name.contains("Reset Run")) {
-            // NEW: Reset Logic
-            event.setCancelled(true);
-            RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
-            if (arena != null && arena.isTimeTrial()) { // Verify it's a time trial
-                arena.resetTimeTrial(p);
-            }
-        }
-    }
-
-    private void handleWand(Player p, Action action, Location blockLoc) {
-        if (!p.hasPermission("race.admin")) return;
-
-        String arenaName = plugin.editorArena.get(p.getUniqueId());
-        if (arenaName == null) { p.sendMessage(Component.text("Select arena in GUI first.", NamedTextColor.RED)); return; }
-
-        RaceArena arena = plugin.getArena(arenaName);
-        IceBoatRacing.EditMode mode = plugin.editorMode.getOrDefault(p.getUniqueId(), IceBoatRacing.EditMode.SPAWN);
-
-        // Shift+Right Click: Cycle Mode
-        if (p.isSneaking() && action.name().contains("RIGHT")) {
-            plugin.editorMode.put(p.getUniqueId(), mode.next());
-            p.sendActionBar(Component.text("Mode: " + mode.next().name, mode.next().color));
-            p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 2f);
+        // Check for race wand
+        if (item.getItemMeta().getPersistentDataContainer().has(plugin.guiManager.raceWandKey,
+                PersistentDataType.BYTE)) {
+            e.setCancelled(true);
+            handleWand(p, e.getAction(), e.getClickedBlock());
             return;
         }
 
-        if (blockLoc == null) return;
-        Location loc = blockLoc.clone().add(0.5, 1, 0.5);
-        loc.setYaw(p.getLocation().getYaw());
-
-        // Right Click: Add Node
-        if (action == Action.RIGHT_CLICK_BLOCK) {
-            switch (mode) {
-                case SPAWN -> { arena.addSpawn(loc); actionMsg(p, "Spawn added."); }
-                case CHECKPOINT -> { arena.addCheckpoint(loc); actionMsg(p, "Checkpoint added."); }
-                case FINISH_1 -> { arena.setFinishLine(loc, arena.getFinishPos2()); actionMsg(p, "Finish 1 Set."); }
-                case FINISH_2 -> { arena.setFinishLine(arena.getFinishPos1(), loc); actionMsg(p, "Finish 2 Set."); }
-                case LOBBY -> { arena.setLobby(loc); actionMsg(p, "Lobby Set."); }
-                case MAIN_LOBBY -> { arena.setMainLobby(loc); actionMsg(p, "Main Lobby Set."); }
-                case LEADERBOARD -> { arena.setLeaderboardLocation(loc.add(0, 1.5, 0)); actionMsg(p, "Leaderboard Set."); }
+        // Check for reset run item
+        if (item.getType() == Material.RED_DYE) {
+            String displayName = item.getItemMeta().displayName() != null
+                    ? net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                            .serialize(item.getItemMeta().displayName())
+                    : "";
+            if (displayName.contains("Reset Run")) {
+                RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+                if (arena != null && arena.isTimeTrial()) {
+                    e.setCancelled(true);
+                    arena.resetTimeTrial(p);
+                }
             }
-            plugin.saveArenas();
         }
-        // Left Click: Remove Node
-        else if (action == Action.LEFT_CLICK_BLOCK) {
-            boolean removed = (mode == IceBoatRacing.EditMode.SPAWN) ? arena.removeNodeAtBlock(arena.getSpawns(), blockLoc) :
-                    (mode == IceBoatRacing.EditMode.CHECKPOINT) ? arena.removeNodeAtBlock(arena.getCheckpoints(), blockLoc) : false;
 
-            if (removed) {
-                plugin.saveArenas();
-                p.playSound(p.getLocation(), Sound.BLOCK_CANDLE_EXTINGUISH, 1f, 1f);
-                p.spawnParticle(Particle.SMOKE, blockLoc.add(0.5, 1, 0.5), 20, 0.2, 0.2, 0.2, 0.05);
-                p.sendMessage(Component.text("Node removed.", NamedTextColor.RED));
-            } else {
-                p.sendMessage(Component.text("Can only delete Spawns/Checkpoints via click.", NamedTextColor.RED));
+        // Spectator items
+        if (plugin.isRacer(p.getUniqueId())) {
+            RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+            if (arena != null && arena.isSpectator(p.getUniqueId())) {
+                e.setCancelled(true);
+                if (item.getType() == Material.CLOCK && e.getAction().name().contains("RIGHT")) {
+                    arena.cycleSpectatorMode(p);
+                } else if (item.getType() == Material.BARRIER && e.getAction().name().contains("RIGHT")) {
+                    arena.removePlayer(p);
+                }
             }
         }
     }
 
-    // Helper to send message + sound
-    private void actionMsg(Player p, String msg) {
-        p.sendMessage(Component.text(msg, NamedTextColor.GREEN));
-        p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 2f);
+    private void handleWand(Player p, Action action, Block clickedBlock) {
+        String arenaName = plugin.editorArena.get(p.getUniqueId());
+        EditMode mode = plugin.editorMode.get(p.getUniqueId());
+
+        if (arenaName == null || mode == null) {
+            p.sendMessage(Component.text("Select an arena to edit from the Admin Panel first!", NamedTextColor.RED));
+            return;
+        }
+
+        RaceArena arena = plugin.getArena(arenaName);
+        if (arena == null) {
+            p.sendMessage(Component.text("Arena '" + arenaName + "' not found.", NamedTextColor.RED));
+            return;
+        }
+
+        if (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK) {
+            if (p.isSneaking() && clickedBlock != null) {
+                // Shift+Right-Click: Remove point
+                handleRemovePoint(p, arena, mode, clickedBlock);
+            } else {
+                // Right-Click: Cycle mode
+                EditMode next = mode.next();
+                plugin.editorMode.put(p.getUniqueId(), next);
+                p.sendMessage(Component.text("Wand mode: " + next.displayName, next.color));
+                p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1.2f);
+            }
+            return;
+        }
+
+        if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
+            // Left-Click: Add point
+            Location loc = clickedBlock != null ? clickedBlock.getLocation().add(0.5, 1, 0.5) : p.getLocation();
+
+            switch (mode) {
+                case SPAWN -> {
+                    arena.addSpawn(loc);
+                    p.sendMessage(Component.text("Added Spawn #" + arena.getSpawns().size(), NamedTextColor.GREEN));
+                }
+                case CHECKPOINT -> {
+                    arena.addCheckpoint(loc);
+                    p.sendMessage(
+                            Component.text("Added Checkpoint #" + arena.getCheckpoints().size(), NamedTextColor.RED));
+                }
+                case FINISH_1 -> {
+                    arena.setFinishLine(loc, arena.getFinishPos2());
+                    p.sendMessage(Component.text("Set Finish Position 1", NamedTextColor.AQUA));
+                }
+                case FINISH_2 -> {
+                    arena.setFinishLine(arena.getFinishPos1(), loc);
+                    p.sendMessage(Component.text("Set Finish Position 2", NamedTextColor.AQUA));
+                }
+                case LOBBY -> {
+                    arena.setLobby(loc);
+                    p.sendMessage(Component.text("Set Pre-Race Lobby", NamedTextColor.GOLD));
+                }
+                case MAIN_LOBBY -> {
+                    arena.setMainLobby(loc);
+                    p.sendMessage(Component.text("Set Main Lobby (Post-Race)", NamedTextColor.YELLOW));
+                }
+                case LEADERBOARD -> {
+                    arena.setLeaderboardLocation(loc);
+                    p.sendMessage(Component.text("Set Leaderboard Hologram Position", NamedTextColor.LIGHT_PURPLE));
+                }
+            }
+            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 2f);
+            plugin.saveArenas();
+        }
+    }
+
+    private void handleRemovePoint(Player p, RaceArena arena, EditMode mode, Block clickedBlock) {
+        Location loc = clickedBlock.getLocation();
+        boolean removed = false;
+
+        switch (mode) {
+            case SPAWN -> removed = arena.removeNodeAtBlock(arena.getSpawns(), loc);
+            case CHECKPOINT -> removed = arena.removeNodeAtBlock(arena.getCheckpoints(), loc);
+            default -> p.sendMessage(Component.text("Can only remove spawns and checkpoints!", NamedTextColor.RED));
+        }
+
+        if (removed) {
+            p.sendMessage(Component.text("Removed point!", NamedTextColor.YELLOW));
+            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 0.5f);
+            plugin.saveArenas();
+        } else {
+            p.sendMessage(Component.text("No point found at that location.", NamedTextColor.GRAY));
+        }
     }
 }

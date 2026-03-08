@@ -10,25 +10,27 @@ import org.bukkit.*;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.*;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
+import peyaj.arena.RaceState;
+import peyaj.arena.RaceType;
+import peyaj.arena.SpectatorMode;
+import peyaj.cosmetics.TrailType;
+import peyaj.data.GhostData;
+import peyaj.replay.ReplayData;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class RaceArena {
-
-    public enum RaceType { DEFAULT, LAP }
-    public enum RaceState { LOBBY, STARTING, ACTIVE }
 
     private final String name;
     private final IceBoatRacing plugin;
@@ -58,6 +60,7 @@ public class RaceArena {
     private final Map<UUID, Integer> playerLaps = new HashMap<>();
     private final Map<UUID, Long> startTimes = new HashMap<>();
     private final Map<UUID, String> finishTimes = new HashMap<>();
+    private final Map<UUID, Long> finishTimesMs = new HashMap<>();
     private final Map<UUID, Boat> playerBoats = new HashMap<>();
     private final Set<UUID> players = new HashSet<>();
     private final Set<UUID> spectators = new HashSet<>();
@@ -65,24 +68,36 @@ public class RaceArena {
     private final Map<UUID, Location> lastLocations = new HashMap<>();
     private final List<Location> glassBlocks = new ArrayList<>();
 
+    // Spectator modes
+    private final Map<UUID, SpectatorMode> spectatorModes = new HashMap<>();
+    private final Map<UUID, UUID> spectatorTargets = new HashMap<>();
+
     // Leaderboard Data
     public final Map<UUID, Long> bestTimes = new HashMap<>();
 
-    // --- GHOST & SPLIT TIMING DATA ---
-    private final Map<UUID, IceBoatRacing.GhostData> currentRecordings = new HashMap<>();
-    private IceBoatRacing.GhostData bestGhost = null;
+    // Ghost & Replay
+    private final Map<UUID, GhostData> currentRecordings = new HashMap<>();
+    private GhostData bestGhost = null;
     private int ghostPlaybackTick = 0;
     private Boat visualGhostBoat = null;
+    private ReplayData currentReplay = null;
 
     private final Map<UUID, Map<Integer, Long>> checkpointTimestamps = new HashMap<>();
 
-    // --- UTILS ---
+    // Utils
     private int tickCounter = 0;
-
     private BukkitTask autoStartTask = null;
     private int lobbyCountdown = -1;
     private int raceStartCountdown = -1;
     private BukkitTask musicTask = null;
+    private boolean isTimeTrialMode = false;
+
+    // Elimination mode tracking
+    private final Set<UUID> eliminatedPlayers = new HashSet<>();
+    private int currentLapForElimination = 0;
+
+    // Fake entity IDs for ghosts
+    private final Map<UUID, Integer> ghostEntityIds = new HashMap<>();
 
     public RaceArena(String name, IceBoatRacing plugin) {
         this.name = name;
@@ -90,25 +105,78 @@ public class RaceArena {
     }
 
     // --- GETTERS & SETTERS ---
-    public String getName() { return name; }
-    public RaceType getType() { return type; }
-    public void setType(RaceType type) { this.type = type; }
-    public int getTotalLaps() { return totalLaps; }
-    public void setTotalLaps(int laps) { this.totalLaps = laps; }
-    public Location getLobby() { return lobby; }
-    public void setLobby(Location loc) { this.lobby = loc; }
-    public Location getMainLobby() { return mainLobby; }
-    public void setMainLobby(Location loc) { this.mainLobby = loc; }
-    public List<Location> getSpawns() { return spawns; }
-    public List<Location> getCheckpoints() { return checkpoints; }
-    public Location getFinishPos1() { return finishPos1; }
-    public Location getFinishPos2() { return finishPos2; }
-    public BoundingBox getFinishBox() { return finishBox; }
-    public RaceState getState() { return state; }
-    public int getPlayerCount() { return players.size(); }
-    public boolean isTimeTrial() { return isTimeTrialMode; }
+    public String getName() {
+        return name;
+    }
 
-    public Location getLeaderboardLocation() { return leaderboardLocation; }
+    public RaceType getType() {
+        return type;
+    }
+
+    public void setType(RaceType type) {
+        this.type = type;
+    }
+
+    public int getTotalLaps() {
+        return totalLaps;
+    }
+
+    public void setTotalLaps(int laps) {
+        this.totalLaps = laps;
+    }
+
+    public Location getLobby() {
+        return lobby;
+    }
+
+    public void setLobby(Location loc) {
+        this.lobby = loc;
+    }
+
+    public Location getMainLobby() {
+        return mainLobby;
+    }
+
+    public void setMainLobby(Location loc) {
+        this.mainLobby = loc;
+    }
+
+    public List<Location> getSpawns() {
+        return spawns;
+    }
+
+    public List<Location> getCheckpoints() {
+        return checkpoints;
+    }
+
+    public Location getFinishPos1() {
+        return finishPos1;
+    }
+
+    public Location getFinishPos2() {
+        return finishPos2;
+    }
+
+    public BoundingBox getFinishBox() {
+        return finishBox;
+    }
+
+    public RaceState getState() {
+        return state;
+    }
+
+    public int getPlayerCount() {
+        return players.size();
+    }
+
+    public boolean isTimeTrial() {
+        return isTimeTrialMode;
+    }
+
+    public Location getLeaderboardLocation() {
+        return leaderboardLocation;
+    }
+
     public void setLeaderboardLocation(Location loc) {
         this.leaderboardLocation = loc;
         updateLeaderboardHologram();
@@ -118,17 +186,23 @@ public class RaceArena {
         return spectators.contains(uuid);
     }
 
-    public void addSpawn(Location loc) { spawns.add(loc); }
-    public void addCheckpoint(Location loc) { checkpoints.add(loc); }
+    public void addSpawn(Location loc) {
+        spawns.add(loc);
+    }
+
+    public void addCheckpoint(Location loc) {
+        checkpoints.add(loc);
+    }
 
     public boolean removeNodeAtBlock(List<Location> list, Location clickedBlockLoc) {
         Iterator<Location> it = list.iterator();
-        while(it.hasNext()) {
+        while (it.hasNext()) {
             Location nodeLoc = it.next();
             if (nodeLoc.getWorld().equals(clickedBlockLoc.getWorld()) &&
                     nodeLoc.getBlockX() == clickedBlockLoc.getBlockX() &&
                     nodeLoc.getBlockZ() == clickedBlockLoc.getBlockZ() &&
-                    (nodeLoc.getBlockY() == clickedBlockLoc.getBlockY() || nodeLoc.getBlockY() == clickedBlockLoc.getBlockY() + 1)) {
+                    (nodeLoc.getBlockY() == clickedBlockLoc.getBlockY()
+                            || nodeLoc.getBlockY() == clickedBlockLoc.getBlockY() + 1)) {
                 it.remove();
                 return true;
             }
@@ -143,7 +217,8 @@ public class RaceArena {
     }
 
     public void recalculateFinishBox() {
-        if (finishPos1 != null && finishPos2 != null && finishPos1.getWorld() != null && finishPos1.getWorld().equals(finishPos2.getWorld())) {
+        if (finishPos1 != null && finishPos2 != null && finishPos1.getWorld() != null
+                && finishPos1.getWorld().equals(finishPos2.getWorld())) {
             finishBox = BoundingBox.of(finishPos1, finishPos2).expand(0, 10.0, 0);
             finishCenter = finishBox.getCenter().toLocation(finishPos1.getWorld());
         }
@@ -151,7 +226,8 @@ public class RaceArena {
 
     // --- HOLOGRAMS ---
     public void updateLeaderboardHologram() {
-        if (leaderboardLocation == null) return;
+        if (leaderboardLocation == null)
+            return;
         try {
             String holoName = "race_lb_" + name;
             Hologram holo = DHAPI.getHologram(holoName);
@@ -174,16 +250,18 @@ public class RaceArena {
                 String color = (i == 0) ? "&e" : (i == 1) ? "&f" : (i == 2) ? "&6" : "&7";
                 lines.add(color + (i + 1) + ". &f" + pName + " &7- &b" + Utils.formatTime(time));
             }
-            if (limit == 0) lines.add("&7No records yet!");
+            if (limit == 0)
+                lines.add("&7No records yet!");
             lines.add("&7------------------------");
             DHAPI.setHologramLines(holo, lines);
-        } catch (NoClassDefFoundError e) {}
+        } catch (NoClassDefFoundError e) {
+        }
     }
 
     // --- PLAYER MANAGEMENT ---
-    public void addPlayer(Player p) { addPlayer(p, false); }
-
-    private boolean isTimeTrialMode = false;
+    public void addPlayer(Player p) {
+        addPlayer(p, false);
+    }
 
     public void addPlayer(Player p, boolean timeTrial) {
         if (state != RaceState.LOBBY && !timeTrial) {
@@ -196,7 +274,8 @@ public class RaceArena {
         }
 
         if (timeTrial && !players.isEmpty()) {
-            p.sendMessage(Component.text("Lobby is not empty! Joining match instead of Time Trial.", NamedTextColor.YELLOW));
+            p.sendMessage(
+                    Component.text("Lobby is not empty! Joining match instead of Time Trial.", NamedTextColor.YELLOW));
             timeTrial = false;
         }
 
@@ -220,27 +299,70 @@ public class RaceArena {
 
     public void addSpectator(Player p) {
         spectators.add(p.getUniqueId());
+        spectatorModes.put(p.getUniqueId(), SpectatorMode.FREE_FLY);
         p.setGameMode(GameMode.SPECTATOR);
-        if (!spawns.isEmpty()) p.teleport(spawns.get(0));
-        else if (lobby != null) p.teleport(lobby);
-        p.sendMessage(plugin.getMessage("arena-spectating").replaceText(b -> b.matchLiteral("{arena}").replacement(name)));
-        p.showTitle(Title.title(Component.text("SPECTATING", NamedTextColor.GREEN), Component.text("You are watching " + name, NamedTextColor.AQUA)));
+        if (!spawns.isEmpty())
+            p.teleport(spawns.get(0));
+        else if (lobby != null)
+            p.teleport(lobby);
+        p.sendMessage(
+                plugin.getMessage("arena-spectating").replaceText(b -> b.matchLiteral("{arena}").replacement(name)));
+        p.showTitle(Title.title(Component.text("SPECTATING", NamedTextColor.GREEN),
+                Component.text("You are watching " + name, NamedTextColor.AQUA)));
         p.playSound(p.getLocation(), Sound.ENTITY_BAT_TAKEOFF, 1f, 1f);
+        giveSpectatorItems(p);
         setupRaceScoreboard(p);
         plugin.setPlayerArena(p.getUniqueId(), name);
     }
 
+    private void giveSpectatorItems(Player p) {
+        p.getInventory().clear();
+
+        // Compass to select player
+        ItemStack compass = new ItemStack(Material.COMPASS);
+        var compassMeta = compass.getItemMeta();
+        compassMeta.displayName(Component.text("Select Player", NamedTextColor.YELLOW));
+        compass.setItemMeta(compassMeta);
+        p.getInventory().setItem(0, compass);
+
+        // Clock to cycle modes
+        ItemStack clock = new ItemStack(Material.CLOCK);
+        var clockMeta = clock.getItemMeta();
+        clockMeta.displayName(Component.text(
+                "Camera Mode: " + spectatorModes.getOrDefault(p.getUniqueId(), SpectatorMode.FREE_FLY).displayName,
+                NamedTextColor.AQUA));
+        clock.setItemMeta(clockMeta);
+        p.getInventory().setItem(4, clock);
+
+        // Barrier to exit
+        ItemStack barrier = new ItemStack(Material.BARRIER);
+        var barrierMeta = barrier.getItemMeta();
+        barrierMeta.displayName(Component.text("Leave Spectating", NamedTextColor.RED));
+        barrier.setItemMeta(barrierMeta);
+        p.getInventory().setItem(8, barrier);
+    }
+
+    public void cycleSpectatorMode(Player p) {
+        SpectatorMode current = spectatorModes.getOrDefault(p.getUniqueId(), SpectatorMode.FREE_FLY);
+        SpectatorMode next = current.next();
+        spectatorModes.put(p.getUniqueId(), next);
+        p.sendMessage(
+                Component.text("Camera mode: " + next.displayName + " - " + next.description, NamedTextColor.AQUA));
+        p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
+        giveSpectatorItems(p);
+    }
+
     private void giveLobbyItems(Player p, boolean isTimeTrial) {
-        org.bukkit.inventory.ItemStack compass = new org.bukkit.inventory.ItemStack(Material.COMPASS);
-        org.bukkit.inventory.meta.ItemMeta meta = compass.getItemMeta();
+        ItemStack compass = new ItemStack(Material.COMPASS);
+        var meta = compass.getItemMeta();
         meta.displayName(Component.text("Race Menu", NamedTextColor.AQUA));
         meta.lore(List.of(Component.text("Right Click to open", NamedTextColor.GRAY)));
         compass.setItemMeta(meta);
         p.getInventory().setItem(4, compass);
 
         if (isTimeTrial) {
-            org.bukkit.inventory.ItemStack reset = new org.bukkit.inventory.ItemStack(Material.RED_DYE);
-            org.bukkit.inventory.meta.ItemMeta rMeta = reset.getItemMeta();
+            ItemStack reset = new ItemStack(Material.RED_DYE);
+            var rMeta = reset.getItemMeta();
             rMeta.displayName(Component.text("Reset Run", NamedTextColor.RED));
             rMeta.lore(List.of(Component.text("Right Click to restart", NamedTextColor.GRAY)));
             reset.setItemMeta(rMeta);
@@ -249,13 +371,15 @@ public class RaceArena {
     }
 
     public void resetTimeTrial(Player p) {
-        if (!isTimeTrialMode || !players.contains(p.getUniqueId())) return;
+        if (!isTimeTrialMode || !players.contains(p.getUniqueId()))
+            return;
         p.sendMessage(Component.text("↺ Run Reset!", NamedTextColor.YELLOW));
         p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 2f);
 
         if (playerBoats.containsKey(p.getUniqueId())) {
             Boat b = playerBoats.remove(p.getUniqueId());
-            if (b != null) b.remove();
+            if (b != null)
+                b.remove();
         }
 
         if (visualGhostBoat != null) {
@@ -264,12 +388,13 @@ public class RaceArena {
         }
         ghostPlaybackTick = 0;
 
-        currentRecordings.put(p.getUniqueId(), new IceBoatRacing.GhostData(p.getName(), 0));
+        currentRecordings.put(p.getUniqueId(), new GhostData(p.getName(), 0));
         checkpointTimestamps.put(p.getUniqueId(), new HashMap<>());
         playerCheckpoints.put(p.getUniqueId(), 0);
         playerLaps.put(p.getUniqueId(), 1);
         finishOrder.remove(p.getUniqueId());
         finishTimes.remove(p.getUniqueId());
+        finishTimesMs.remove(p.getUniqueId());
 
         startRace(true);
     }
@@ -277,19 +402,25 @@ public class RaceArena {
     public void removePlayer(Player p) {
         if (spectators.contains(p.getUniqueId())) {
             spectators.remove(p.getUniqueId());
+            spectatorModes.remove(p.getUniqueId());
+            spectatorTargets.remove(p.getUniqueId());
             p.setGameMode(GameMode.SURVIVAL);
             p.getInventory().clear();
             p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
-            if (mainLobby != null && mainLobby.getWorld() != null) p.teleport(mainLobby);
-            else if (p.getWorld() != null) p.teleport(p.getWorld().getSpawnLocation());
+            if (mainLobby != null && mainLobby.getWorld() != null)
+                p.teleport(mainLobby);
+            else if (p.getWorld() != null)
+                p.teleport(p.getWorld().getSpawnLocation());
             plugin.removePlayerFromArenaMap(p.getUniqueId());
             p.sendMessage(plugin.getMessage("spectator-left"));
             return;
         }
         players.remove(p.getUniqueId());
+        eliminatedPlayers.remove(p.getUniqueId());
         if (playerBoats.containsKey(p.getUniqueId())) {
             Boat b = playerBoats.remove(p.getUniqueId());
-            if (b != null) b.remove();
+            if (b != null)
+                b.remove();
         }
         currentRecordings.remove(p.getUniqueId());
         checkpointTimestamps.remove(p.getUniqueId());
@@ -298,7 +429,8 @@ public class RaceArena {
         p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
 
         if (players.isEmpty()) {
-            if (state != RaceState.LOBBY) stopRace();
+            if (state != RaceState.LOBBY)
+                stopRace();
             cancelAutoStart();
         } else if (state == RaceState.LOBBY) {
             checkAutoStart();
@@ -309,52 +441,75 @@ public class RaceArena {
     }
 
     public void checkFinishCondition() {
-        if (state != RaceState.ACTIVE) return;
+        if (state != RaceState.ACTIVE)
+            return;
         boolean allFinished = true;
         for (UUID uuid : players) {
-            if (!finishOrder.contains(uuid)) {
+            if (!finishOrder.contains(uuid) && !eliminatedPlayers.contains(uuid)) {
                 allFinished = false;
                 break;
             }
         }
         if (players.isEmpty() || allFinished) {
             Bukkit.broadcast(plugin.getMessage("race-ended"));
-            new BukkitRunnable() { @Override public void run() { stopRace(); } }.runTaskLater(plugin, 100L);
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    stopRace();
+                }
+            }.runTaskLater(plugin, 100L);
         }
     }
 
     // --- GAME LOOP ---
-    public void startRace() { startRace(false); }
+    public void startRace() {
+        startRace(false);
+    }
 
     public void startRace(boolean isTimeTrialSession) {
-        if (spawns.isEmpty()) return;
+        if (spawns.isEmpty())
+            return;
         cancelAutoStart();
 
         this.isTimeTrialMode = isTimeTrialSession;
+        this.currentLapForElimination = 0;
+        eliminatedPlayers.clear();
 
         state = RaceState.STARTING;
         removeCages();
         finishOrder.clear();
         finishTimes.clear();
+        finishTimesMs.clear();
         currentRecordings.clear();
         checkpointTimestamps.clear();
         ghostPlaybackTick = 0;
         tickCounter = 0;
 
-        if (visualGhostBoat != null) { visualGhostBoat.remove(); visualGhostBoat = null; }
+        // Start replay recording
+        if (!isTimeTrialSession && players.size() > 1) {
+            currentReplay = plugin.replayManager.startRecording(name);
+        }
+
+        if (visualGhostBoat != null) {
+            visualGhostBoat.remove();
+            visualGhostBoat = null;
+        }
 
         for (UUID uuid : players) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null) p.getInventory().clear();
+            if (p != null)
+                p.getInventory().clear();
         }
 
         int spawnIndex = 0;
         for (UUID uuid : players) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p == null) continue;
+            if (p == null)
+                continue;
 
             Location spawn = spawns.get(spawnIndex % spawns.size());
-            if (spawn.getWorld() == null) continue;
+            if (spawn.getWorld() == null)
+                continue;
 
             spawnIndex++;
             p.teleport(spawn);
@@ -363,7 +518,7 @@ public class RaceArena {
             boat.addPassenger(p);
             boat.setInvulnerable(true);
             playerBoats.put(uuid, boat);
-            currentRecordings.put(uuid, new IceBoatRacing.GhostData(p.getName(), 0));
+            currentRecordings.put(uuid, new GhostData(p.getName(), 0));
             checkpointTimestamps.put(uuid, new HashMap<>());
             createCage(spawn, uuid);
             playerCheckpoints.put(uuid, 0);
@@ -376,17 +531,44 @@ public class RaceArena {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (state != RaceState.STARTING) { removeCages(); this.cancel(); return; }
-                if (raceStartCountdown == 3) startMusic();
+                if (state != RaceState.STARTING) {
+                    removeCages();
+                    this.cancel();
+                    return;
+                }
+                if (raceStartCountdown == 3)
+                    startMusic();
                 if (raceStartCountdown > 0) {
-                    Title title = Title.title(Component.text(raceStartCountdown, NamedTextColor.RED), Component.empty());
+                    // TRAFFIC LIGHT ANIMATION
+                    Color lightColor;
+                    if (raceStartCountdown >= 4) {
+                        lightColor = Color.RED;
+                    } else if (raceStartCountdown >= 2) {
+                        lightColor = Color.YELLOW;
+                    } else {
+                        lightColor = Color.LIME;
+                    }
+
+                    Title title = Title.title(
+                            Component.text(raceStartCountdown,
+                                    raceStartCountdown >= 4 ? NamedTextColor.RED
+                                            : raceStartCountdown >= 2 ? NamedTextColor.YELLOW : NamedTextColor.GREEN),
+                            Component.empty());
+
                     for (UUID uuid : players) {
                         Player p = Bukkit.getPlayer(uuid);
                         if (p != null) {
                             p.showTitle(title);
-                            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 0.5f + ((5 - raceStartCountdown) * 0.3f));
+                            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f,
+                                    0.5f + ((5 - raceStartCountdown) * 0.3f));
                             Boat boat = playerBoats.get(uuid);
-                            if (boat != null) boat.setVelocity(new Vector(0,0,0));
+                            if (boat != null) {
+                                boat.setVelocity(new Vector(0, 0, 0));
+                                // Spawn traffic light particles above boat
+                                Location lightLoc = boat.getLocation().add(0, 3, 0);
+                                p.getWorld().spawnParticle(Particle.DUST, lightLoc, 15, 0.3, 0.3, 0.3, 0,
+                                        new Particle.DustOptions(lightColor, 2f));
+                            }
                         }
                     }
                     raceStartCountdown--;
@@ -397,11 +579,16 @@ public class RaceArena {
                     for (UUID uuid : players) {
                         startTimes.put(uuid, now);
                         Player p = Bukkit.getPlayer(uuid);
-                        if(p!=null) {
-                            Component goTitle = LegacyComponentSerializer.legacyAmpersand().deserialize(plugin.getRawMessage("race-started"));
+                        if (p != null) {
+                            Component goTitle = LegacyComponentSerializer.legacyAmpersand()
+                                    .deserialize(plugin.getRawMessage("race-started"));
                             p.showTitle(Title.title(goTitle, Component.empty()));
                             p.playSound(p.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, 0.5f, 1f);
                             lastLocations.put(uuid, p.getLocation());
+
+                            // Green burst on GO
+                            Location boatLoc = p.getLocation();
+                            p.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, boatLoc.add(0, 2, 0), 30, 1, 0.5, 1, 0);
                         }
                     }
                     this.cancel();
@@ -413,24 +600,38 @@ public class RaceArena {
     public void stopRace() {
         cancelAutoStart();
         stopAllMusic();
-        if (!finishOrder.isEmpty() && !plugin.discordWebhookUrl.isEmpty()) { sendDiscordResults(); }
+
+        // Send Discord results
+        if (!finishOrder.isEmpty() && !plugin.discordWebhookUrl.isEmpty()) {
+            plugin.discordWebhook.sendRaceResults(plugin.discordWebhookUrl, name, finishOrder, finishTimes);
+        }
+
+        // Save replay
+        if (currentReplay != null && !finishOrder.isEmpty()) {
+            plugin.replayManager.finishRecording(currentReplay, finishTimesMs);
+            currentReplay = null;
+        }
 
         state = RaceState.LOBBY;
         isTimeTrialMode = false;
 
         removeCages();
-        for (Boat b : playerBoats.values()) b.remove();
+        for (Boat b : playerBoats.values())
+            b.remove();
         playerBoats.clear();
         finishOrder.clear();
         finishTimes.clear();
+        finishTimesMs.clear();
         currentRecordings.clear();
         checkpointTimestamps.clear();
+        eliminatedPlayers.clear();
 
         // Clean up fake entities
         for (UUID uuid : players) {
             if (ghostEntityIds.containsKey(uuid)) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null) PacketUtils.destroyFakeEntity(p, ghostEntityIds.get(uuid));
+                if (p != null)
+                    PacketUtils.destroyFakeEntity(p, ghostEntityIds.get(uuid));
             }
         }
         ghostEntityIds.clear();
@@ -441,8 +642,10 @@ public class RaceArena {
                 p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
                 p.setGameMode(GameMode.SURVIVAL);
                 p.getInventory().clear();
-                if (mainLobby != null && mainLobby.getWorld() != null) p.teleport(mainLobby);
-                else if (p.getWorld() != null) p.teleport(p.getWorld().getSpawnLocation());
+                if (mainLobby != null && mainLobby.getWorld() != null)
+                    p.teleport(mainLobby);
+                else if (p.getWorld() != null)
+                    p.teleport(p.getWorld().getSpawnLocation());
                 plugin.removePlayerFromArenaMap(uuid);
             }
         }
@@ -453,51 +656,61 @@ public class RaceArena {
                 p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
                 p.setGameMode(GameMode.SURVIVAL);
                 p.getInventory().clear();
-                if (mainLobby != null && mainLobby.getWorld() != null) p.teleport(mainLobby);
-                else if (p.getWorld() != null) p.teleport(p.getWorld().getSpawnLocation());
+                if (mainLobby != null && mainLobby.getWorld() != null)
+                    p.teleport(mainLobby);
+                else if (p.getWorld() != null)
+                    p.teleport(p.getWorld().getSpawnLocation());
                 plugin.removePlayerFromArenaMap(uuid);
                 p.sendMessage(plugin.getMessage("spectator-left"));
             }
         }
         spectators.clear();
+        spectatorModes.clear();
+        spectatorTargets.clear();
         updateLeaderboardHologram();
     }
 
-    // NEW: Store Fake Entity IDs for ghosts (Player -> EntityID)
-    private final Map<UUID, Integer> ghostEntityIds = new HashMap<>();
-
     public void tick() {
-        if (state == RaceState.LOBBY) return;
+        if (state == RaceState.LOBBY)
+            return;
         if (state == RaceState.ACTIVE) {
             tickCounter++;
 
-            // --- GHOST PLAYBACK (Using Packets) ---
+            // Record replay frame
+            if (currentReplay != null && tickCounter % 2 == 0) {
+                Map<UUID, Location> locations = new HashMap<>();
+                for (UUID uuid : players) {
+                    Player p = Bukkit.getPlayer(uuid);
+                    if (p != null)
+                        locations.put(uuid, p.getLocation());
+                }
+                plugin.replayManager.recordFrame(currentReplay, tickCounter, locations,
+                        new HashSet<>(finishOrder), playerCheckpoints, playerLaps);
+            }
+
+            // Ghost playback
             if (isTimeTrialMode && bestGhost != null && ghostPlaybackTick < bestGhost.points.size()) {
                 Location ghostLoc = bestGhost.points.get(ghostPlaybackTick);
                 if (ghostLoc != null && ghostLoc.getWorld() != null) {
-                    // Particles
-                    ghostLoc.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, ghostLoc.clone().add(0, 0.5, 0), 1, 0, 0, 0, 0);
-
-                    // Packet Boat
+                    ghostLoc.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, ghostLoc.clone().add(0, 0.5, 0), 1, 0,
+                            0, 0, 0);
                     for (UUID uuid : players) {
                         Player p = Bukkit.getPlayer(uuid);
                         if (p != null) {
                             if (!ghostEntityIds.containsKey(uuid)) {
-                                // Spawn new fake entity
                                 int id = PacketUtils.spawnFakeBoat(p, ghostLoc);
                                 ghostEntityIds.put(uuid, id);
                             } else {
-                                // Move existing
                                 PacketUtils.moveFakeBoat(p, ghostEntityIds.get(uuid), ghostLoc);
                             }
                         }
                     }
                 }
             } else if (ghostPlaybackTick >= (bestGhost != null ? bestGhost.points.size() : 0)) {
-                // End of ghost recording - Despawn
                 for (UUID uuid : ghostEntityIds.keySet()) {
                     Player p = Bukkit.getPlayer(uuid);
-                    if (p != null) PacketUtils.destroyFakeEntity(p, ghostEntityIds.get(uuid));
+                    if (p != null)
+                        PacketUtils.destroyFakeEntity(p, ghostEntityIds.get(uuid));
                 }
                 ghostEntityIds.clear();
             }
@@ -505,11 +718,37 @@ public class RaceArena {
 
             List<UUID> ranking = calculateRankings();
 
+            // Spectator camera logic
+            for (UUID uuid : spectators) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null)
+                    continue;
+
+                SpectatorMode mode = spectatorModes.getOrDefault(uuid, SpectatorMode.FREE_FLY);
+                if (mode == SpectatorMode.FOLLOW_LEADER && !ranking.isEmpty()) {
+                    UUID leader = ranking.get(0);
+                    Player leaderPlayer = Bukkit.getPlayer(leader);
+                    if (leaderPlayer != null) {
+                        p.setSpectatorTarget(leaderPlayer);
+                    }
+                } else if (mode == SpectatorMode.FOLLOW_PLAYER) {
+                    UUID target = spectatorTargets.get(uuid);
+                    if (target != null) {
+                        Player targetPlayer = Bukkit.getPlayer(target);
+                        if (targetPlayer != null && targetPlayer.isOnline()) {
+                            p.setSpectatorTarget(targetPlayer);
+                        }
+                    }
+                }
+            }
+
             for (UUID uuid : players) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p == null || !p.isOnline()) continue;
+                if (p == null || !p.isOnline())
+                    continue;
 
-                // Removed: Real Boat Team Logic (since we use Fake Entities now, no collision logic needed for them)
+                if (eliminatedPlayers.contains(uuid))
+                    continue;
 
                 if (!finishOrder.contains(uuid) && playerBoats.containsKey(uuid)) {
                     Location currentLoc = p.getLocation();
@@ -524,19 +763,27 @@ public class RaceArena {
                         currentRecordings.get(uuid).points.add(currentLoc);
                     }
                     Location lastLoc = lastLocations.getOrDefault(uuid, currentLoc);
-                    double speedKmH = (lastLoc.getWorld() == currentLoc.getWorld()) ? currentLoc.distance(lastLoc) * 72.0 : 0;
+                    double speedKmH = (lastLoc.getWorld() == currentLoc.getWorld())
+                            ? currentLoc.distance(lastLoc) * 72.0
+                            : 0;
                     lastLocations.put(uuid, currentLoc);
                     int safety = 0;
                     boolean keepChecking = true;
-                    while(keepChecking && safety < 3) {
+                    while (keepChecking && safety < 3) {
                         keepChecking = checkObjectivesAlongPath(p, uuid, lastLoc, currentLoc);
                         safety++;
                     }
-                    Utils.spawnTrailParticles(p, playerBoats.get(uuid), plugin.getPlayerTrailPreference(uuid));
-                    long timeMs = System.currentTimeMillis() - startTimes.getOrDefault(uuid, System.currentTimeMillis());
+
+                    TrailType trail = plugin.getPlayerTrailPreference(uuid);
+                    Utils.spawnTrailParticles(p, playerBoats.get(uuid), trail);
+
+                    long timeMs = System.currentTimeMillis()
+                            - startTimes.getOrDefault(uuid, System.currentTimeMillis());
                     String timeStr = Utils.formatTime(timeMs);
-                    int displayLap = (type == RaceType.LAP) ? playerLaps.getOrDefault(uuid, 1) : 1;
-                    int maxLap = (type == RaceType.LAP) ? totalLaps : 1;
+                    int displayLap = (type == RaceType.LAP || type == RaceType.ELIMINATION)
+                            ? playerLaps.getOrDefault(uuid, 1)
+                            : 1;
+                    int maxLap = (type == RaceType.LAP || type == RaceType.ELIMINATION) ? totalLaps : 1;
                     int cp = playerCheckpoints.getOrDefault(uuid, 0);
                     updateRaceScoreboard(p, timeStr, speedKmH, cp, checkpoints.size(), displayLap, maxLap, ranking);
 
@@ -544,7 +791,8 @@ public class RaceArena {
                         p.sendMessage(plugin.getMessage("stuck-tip"));
                     }
                     String abText = String.format("§b%.0f km/h  §7|  §aCP: %d/%d", speedKmH, cp, checkpoints.size());
-                    if (type == RaceType.LAP) abText += String.format("  §7|  §6Lap: %d/%d", displayLap, maxLap);
+                    if (type == RaceType.LAP || type == RaceType.ELIMINATION)
+                        abText += String.format("  §7|  §6Lap: %d/%d", displayLap, maxLap);
                     p.sendActionBar(Component.text(abText));
                     highlightNextTarget(p, uuid);
                 } else {
@@ -589,15 +837,21 @@ public class RaceArena {
             double maxDist = direction.length();
             if (maxDist > 0.01) {
                 org.bukkit.util.RayTraceResult result = finishBox.rayTrace(start, direction.normalize(), maxDist);
-                if (result != null) { handleFinishLineHit(p, uuid); return true; }
+                if (result != null) {
+                    handleFinishLineHit(p, uuid);
+                    return true;
+                }
             }
-            if (finishBox.contains(to.toVector())) { handleFinishLineHit(p, uuid); return true; }
+            if (finishBox.contains(to.toVector())) {
+                handleFinishLineHit(p, uuid);
+                return true;
+            }
         }
         return false;
     }
 
     private void handleFinishLineHit(Player p, UUID uuid) {
-        if (type == RaceType.LAP) {
+        if (type == RaceType.LAP || type == RaceType.ELIMINATION) {
             int lap = playerLaps.getOrDefault(uuid, 1);
             if (lap < totalLaps) {
                 playerLaps.put(uuid, lap + 1);
@@ -607,6 +861,12 @@ public class RaceArena {
                         .replace("{lap}", String.valueOf(lap + 1))
                         .replace("{total}", String.valueOf(totalLaps));
                 p.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(msg));
+
+                // ELIMINATION MODE: Check for elimination at end of each lap
+                if (type == RaceType.ELIMINATION && lap > currentLapForElimination) {
+                    currentLapForElimination = lap;
+                    eliminateLastPlace();
+                }
             } else {
                 finishPlayer(p);
             }
@@ -615,55 +875,175 @@ public class RaceArena {
         }
     }
 
+    private void eliminateLastPlace() {
+        List<UUID> ranking = calculateRankings();
+        if (ranking.size() <= 1)
+            return;
+
+        // Find the last non-finished, non-eliminated player
+        UUID lastPlace = null;
+        for (int i = ranking.size() - 1; i >= 0; i--) {
+            UUID uuid = ranking.get(i);
+            if (!finishOrder.contains(uuid) && !eliminatedPlayers.contains(uuid)) {
+                lastPlace = uuid;
+                break;
+            }
+        }
+
+        if (lastPlace == null)
+            return;
+
+        eliminatedPlayers.add(lastPlace);
+        Player eliminated = Bukkit.getPlayer(lastPlace);
+        if (eliminated != null) {
+            // Remove boat and convert to spectator
+            if (playerBoats.containsKey(lastPlace)) {
+                Boat boat = playerBoats.remove(lastPlace);
+                if (boat != null)
+                    boat.remove();
+            }
+
+            eliminated.setGameMode(GameMode.SPECTATOR);
+            eliminated.showTitle(Title.title(
+                    Component.text("ELIMINATED", NamedTextColor.RED),
+                    Component.text("You finished last this lap!", NamedTextColor.GRAY)));
+            eliminated.playSound(eliminated.getLocation(), Sound.ENTITY_WITHER_DEATH, 0.5f, 0.5f);
+
+            Bukkit.broadcast(
+                    Component.text("💀 " + eliminated.getName() + " has been eliminated!", NamedTextColor.RED));
+        }
+
+        // Check if race should end
+        long remainingRacers = players.stream()
+                .filter(uuid -> !finishOrder.contains(uuid) && !eliminatedPlayers.contains(uuid))
+                .count();
+
+        if (remainingRacers <= 1) {
+            // Last player standing wins
+            for (UUID uuid : players) {
+                if (!finishOrder.contains(uuid) && !eliminatedPlayers.contains(uuid)) {
+                    Player winner = Bukkit.getPlayer(uuid);
+                    if (winner != null) {
+                        finishPlayer(winner);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     private void finishPlayer(Player p) {
         stopMusic(p);
-        if (finishOrder.contains(p.getUniqueId())) return;
+        if (finishOrder.contains(p.getUniqueId()))
+            return;
         finishOrder.add(p.getUniqueId());
         long timeMs = System.currentTimeMillis() - startTimes.get(p.getUniqueId());
         String timeStr = Utils.formatTime(timeMs);
         finishTimes.put(p.getUniqueId(), timeStr);
+        finishTimesMs.put(p.getUniqueId(), timeMs);
         plugin.incrementStat(p.getUniqueId(), "races_played");
-        if (finishOrder.size() == 1) { plugin.incrementStat(p.getUniqueId(), "wins"); }
+        boolean isWinner = finishOrder.size() == 1;
+        if (isWinner) {
+            plugin.incrementStat(p.getUniqueId(), "wins");
+        }
+
         if (!bestTimes.containsKey(p.getUniqueId()) || timeMs < bestTimes.get(p.getUniqueId())) {
             bestTimes.put(p.getUniqueId(), timeMs);
             p.sendMessage(plugin.getMessage("new-pb").replaceText(b -> b.matchLiteral("{time}").replacement(timeStr)));
+
+            // Check for server record
             if (currentRecordings.containsKey(p.getUniqueId())) {
                 boolean isServerBest = true;
                 for (Long t : bestTimes.values()) {
-                    if (t < timeMs) { isServerBest = false; break; }
+                    if (t < timeMs) {
+                        isServerBest = false;
+                        break;
+                    }
                 }
                 if (isServerBest) {
                     bestGhost = currentRecordings.get(p.getUniqueId());
                     p.sendMessage(plugin.getMessage("new-server-record"));
+
+                    // Discord notification for server record
+                    if (!plugin.discordWebhookUrl.isEmpty()) {
+                        plugin.discordWebhook.sendNewRecord(plugin.discordWebhookUrl, name, p.getName(), timeStr, true);
+                    }
                 }
             }
         }
 
-        Component titleMain = LegacyComponentSerializer.legacyAmpersand().deserialize(plugin.getRawMessage("finished-title"));
-        Component titleSub = LegacyComponentSerializer.legacyAmpersand().deserialize(plugin.getRawMessage("finished-subtitle").replace("{time}", timeStr));
+        Component titleMain = LegacyComponentSerializer.legacyAmpersand()
+                .deserialize(plugin.getRawMessage("finished-title"));
+        Component titleSub = LegacyComponentSerializer.legacyAmpersand()
+                .deserialize(plugin.getRawMessage("finished-subtitle").replace("{time}", timeStr));
         p.showTitle(Title.title(titleMain, titleSub));
 
         p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1f);
         p.playSound(p.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_LARGE_BLAST, 1f, 1f);
+
+        // VICTORY CELEBRATION: Spawn fireworks for winner
+        if (isWinner) {
+            spawnVictoryFireworks(p.getLocation());
+            Bukkit.broadcast(Component.text(""));
+            Bukkit.broadcast(Component.text("🏆 " + p.getName() + " WINS THE RACE! 🏆", NamedTextColor.GOLD));
+            Bukkit.broadcast(Component.text(""));
+        }
+
         Boat boat = playerBoats.remove(p.getUniqueId());
-        if (boat != null) boat.remove();
+        if (boat != null)
+            boat.remove();
         p.setGameMode(GameMode.SPECTATOR);
-        String broadcastMsg = plugin.getRawMessage("finish-broadcast").replace("{player}", p.getName()).replace("{arena}", name).replace("{time}", timeStr);
+        String broadcastMsg = plugin.getRawMessage("finish-broadcast").replace("{player}", p.getName())
+                .replace("{arena}", name).replace("{time}", timeStr);
         Bukkit.broadcast(LegacyComponentSerializer.legacyAmpersand().deserialize(broadcastMsg));
         checkFinishCondition();
     }
 
+    private void spawnVictoryFireworks(Location loc) {
+        for (int i = 0; i < 5; i++) {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    Location fireworkLoc = loc.clone().add(
+                            ThreadLocalRandom.current().nextDouble(-3, 3),
+                            ThreadLocalRandom.current().nextDouble(0, 2),
+                            ThreadLocalRandom.current().nextDouble(-3, 3));
+                    Firework fw = loc.getWorld().spawn(fireworkLoc, Firework.class);
+                    FireworkMeta meta = fw.getFireworkMeta();
+                    meta.addEffect(FireworkEffect.builder()
+                            .withColor(Color.AQUA, Color.YELLOW, Color.WHITE)
+                            .withFade(Color.BLUE)
+                            .with(FireworkEffect.Type.BALL_LARGE)
+                            .trail(true)
+                            .flicker(true)
+                            .build());
+                    meta.setPower(1);
+                    fw.setFireworkMeta(meta);
+                }
+            }.runTaskLater(plugin, i * 10L);
+        }
+    }
+
     public void respawnPlayer(Player p) {
-        if (state != RaceState.ACTIVE) return;
+        if (state != RaceState.ACTIVE)
+            return;
         int idx = playerCheckpoints.getOrDefault(p.getUniqueId(), 0);
         Location loc = (idx == 0) ? (!spawns.isEmpty() ? spawns.getFirst() : lobby) : checkpoints.get(idx - 1);
-        if (loc == null) return;
-        if (playerBoats.containsKey(p.getUniqueId())) playerBoats.get(p.getUniqueId()).remove();
+        if (loc == null)
+            return;
+        if (playerBoats.containsKey(p.getUniqueId()))
+            playerBoats.get(p.getUniqueId()).remove();
         p.teleport(loc);
         p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
         lastLocations.put(p.getUniqueId(), loc);
         Boat boat = (Boat) p.getWorld().spawnEntity(loc, EntityType.BOAT);
         Utils.assignRandomBoatType(boat);
+        boat.addPassenger(p);
+        boat.setInvulnerable(true);
+        playerBoats.put(p.getUniqueId(), boat);
+
+        // Critical Fix: Sync last location immediately to avoid speed hack calculation
+        lastLocations.put(p.getUniqueId(), loc);
         boat.addPassenger(p);
         boat.setInvulnerable(true);
         playerBoats.put(p.getUniqueId(), boat);
@@ -674,7 +1054,13 @@ public class RaceArena {
                     Player otherP = Bukkit.getPlayer(otherUUID);
                     if (otherP != null) {
                         otherP.hideEntity(plugin, boat);
-                        new BukkitRunnable() { @Override public void run() { if (otherP.isOnline() && boat.isValid()) otherP.showEntity(plugin, boat); } }.runTaskLater(plugin, 1L);
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                if (otherP.isOnline() && boat.isValid())
+                                    otherP.showEntity(plugin, boat);
+                            }
+                        }.runTaskLater(plugin, 1L);
                     }
                 }
             }
@@ -683,15 +1069,20 @@ public class RaceArena {
 
     private List<UUID> calculateRankings() {
         List<UUID> rankList = new ArrayList<>(players);
+        rankList.removeAll(eliminatedPlayers);
         rankList.sort((u1, u2) -> {
             boolean f1 = finishOrder.contains(u1);
             boolean f2 = finishOrder.contains(u2);
-            if (f1 != f2) return f1 ? -1 : 1;
-            if (f1) return Integer.compare(finishOrder.indexOf(u1), finishOrder.indexOf(u2));
+            if (f1 != f2)
+                return f1 ? -1 : 1;
+            if (f1)
+                return Integer.compare(finishOrder.indexOf(u1), finishOrder.indexOf(u2));
             int l1 = playerLaps.getOrDefault(u1, 1), l2 = playerLaps.getOrDefault(u2, 1);
-            if (l1 != l2) return Integer.compare(l2, l1);
+            if (l1 != l2)
+                return Integer.compare(l2, l1);
             int c1 = playerCheckpoints.getOrDefault(u1, 0), c2 = playerCheckpoints.getOrDefault(u2, 0);
-            if (c1 != c2) return Integer.compare(c2, c1);
+            if (c1 != c2)
+                return Integer.compare(c2, c1);
             double d1 = getDistanceToTarget(u1, c1);
             double d2 = getDistanceToTarget(u2, c2);
             return Double.compare(d1, d2);
@@ -701,38 +1092,52 @@ public class RaceArena {
 
     private double getDistanceToTarget(UUID uuid, int cpIndex) {
         Player p = Bukkit.getPlayer(uuid);
-        if (p == null) return Double.MAX_VALUE;
+        if (p == null)
+            return Double.MAX_VALUE;
         Location target;
-        if (cpIndex < checkpoints.size()) target = checkpoints.get(cpIndex);
-        else if (finishCenter != null) target = finishCenter;
-        else target = finishPos1;
-        if (target == null || !p.getWorld().equals(target.getWorld())) return Double.MAX_VALUE;
+        if (cpIndex < checkpoints.size())
+            target = checkpoints.get(cpIndex);
+        else if (finishCenter != null)
+            target = finishCenter;
+        else
+            target = finishPos1;
+        if (target == null || !p.getWorld().equals(target.getWorld()))
+            return Double.MAX_VALUE;
         return p.getLocation().distanceSquared(target);
     }
 
     private void highlightNextTarget(Player p, UUID uuid) {
         int currentCpIndex = playerCheckpoints.getOrDefault(uuid, 0);
         Location target = null;
-        if (currentCpIndex < checkpoints.size()) target = checkpoints.get(currentCpIndex);
-        else if (finishCenter != null) target = finishCenter;
-        else target = finishPos1;
-        if (target != null) p.spawnParticle(Particle.HAPPY_VILLAGER, target.clone().add(0, 1.5, 0), 2, 0.2, 0.2, 0.2, 0);
+        if (currentCpIndex < checkpoints.size())
+            target = checkpoints.get(currentCpIndex);
+        else if (finishCenter != null)
+            target = finishCenter;
+        else
+            target = finishPos1;
+        if (target != null)
+            p.spawnParticle(Particle.HAPPY_VILLAGER, target.clone().add(0, 1.5, 0), 2, 0.2, 0.2, 0.2, 0);
     }
 
     private void createCage(Location spawn, UUID uuid) {
         Material cageMat = plugin.getPlayerCagePreference(uuid);
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) for (int y = 0; y <= 2; y++) {
-            if (Math.abs(x) <= 1 && Math.abs(z) <= 1) continue;
-            Location b = spawn.clone().add(x, y, z);
-            if (b.getBlock().getType() == Material.AIR) {
-                b.getBlock().setType(cageMat);
-                glassBlocks.add(b);
-            }
-        }
+        for (int x = -2; x <= 2; x++)
+            for (int z = -2; z <= 2; z++)
+                for (int y = 0; y <= 2; y++) {
+                    if (Math.abs(x) <= 1 && Math.abs(z) <= 1)
+                        continue;
+                    Location b = spawn.clone().add(x, y, z);
+                    if (b.getBlock().getType() == Material.AIR) {
+                        b.getBlock().setType(cageMat);
+                        glassBlocks.add(b);
+                    }
+                }
     }
 
     private void removeCages() {
-        for (Location l : glassBlocks) if (l.getBlock().getType().name().contains("GLASS")) l.getBlock().setType(Material.AIR);
+        for (Location l : glassBlocks)
+            if (l.getBlock().getType().name().contains("GLASS"))
+                l.getBlock().setType(Material.AIR);
         glassBlocks.clear();
     }
 
@@ -740,7 +1145,8 @@ public class RaceArena {
         for (UUID uuid : playerBoats.keySet()) {
             Boat b = playerBoats.get(uuid);
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null && b != null) syncGhostModeForPlayer(p, b);
+            if (p != null && b != null)
+                syncGhostModeForPlayer(p, b);
         }
     }
 
@@ -760,76 +1166,81 @@ public class RaceArena {
                 Player otherP = Bukkit.getPlayer(otherUUID);
                 if (otherP != null) {
                     otherP.hideEntity(plugin, b);
-                    new BukkitRunnable() { @Override public void run() { if (otherP.isOnline() && b.isValid()) otherP.showEntity(plugin, b); } }.runTaskLater(plugin, 1L);
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            if (otherP.isOnline() && b.isValid())
+                                otherP.showEntity(plugin, b);
+                        }
+                    }.runTaskLater(plugin, 1L);
                 }
             }
         }
     }
 
     public void startMusic() {
-        if (!plugin.musicEnabled) return;
-        if (musicTask != null && !musicTask.isCancelled()) musicTask.cancel();
+        if (!plugin.musicEnabled)
+            return;
+        if (musicTask != null && !musicTask.isCancelled())
+            musicTask.cancel();
         musicTask = new BukkitRunnable() {
-            @Override public void run() {
-                if (state != RaceState.ACTIVE && state != RaceState.STARTING) { this.cancel(); return; }
+            @Override
+            public void run() {
+                if (state != RaceState.ACTIVE && state != RaceState.STARTING) {
+                    this.cancel();
+                    return;
+                }
                 for (UUID uuid : players) {
                     if (!finishOrder.contains(uuid)) {
                         Player p = Bukkit.getPlayer(uuid);
-                        if (p != null && p.isOnline()) p.playSound(p.getLocation(), plugin.musicSound, SoundCategory.MASTER, plugin.musicVolume, plugin.musicPitch);
+                        if (p != null && p.isOnline())
+                            p.playSound(p.getLocation(), plugin.musicSound, SoundCategory.MASTER, plugin.musicVolume,
+                                    plugin.musicPitch);
                     }
                 }
             }
         }.runTaskTimer(plugin, 0L, plugin.musicDuration * 20L);
     }
-    public void stopMusic(Player p) { if (p != null) p.stopSound(plugin.musicSound, SoundCategory.MASTER); }
-    public void stopAllMusic() {
-        if (musicTask != null) { musicTask.cancel(); musicTask = null; }
-        for (UUID uuid : players) stopMusic(Bukkit.getPlayer(uuid));
+
+    public void stopMusic(Player p) {
+        if (p != null)
+            p.stopSound(plugin.musicSound, SoundCategory.MASTER);
     }
 
-    private void sendDiscordResults() {
-        if (plugin.discordWebhookUrl == null || plugin.discordWebhookUrl.isEmpty()) return;
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                try {
-                    StringBuilder description = new StringBuilder();
-                    int rank = 1;
-                    String[] emojis = {"🥇", "🥈", "🥉"};
-                    for (UUID uuid : finishOrder) {
-                        if (rank > 10) break;
-                        Player p = Bukkit.getPlayer(uuid);
-                        String name = (p != null) ? p.getName() : Bukkit.getOfflinePlayer(uuid).getName();
-                        String time = finishTimes.getOrDefault(uuid, "DNF");
-                        String medal = (rank <= 3) ? emojis[rank-1] + " " : rank + ". ";
-                        description.append(medal).append("**").append(name).append("** - `").append(time).append("`\\n");
-                        rank++;
-                    }
-                    String json = "{\"embeds\": [{" + "  \"title\": \"🏆 Race Results: " + name + "\"," + "  \"color\": 5814783," + "  \"description\": \"" + description.toString() + "\"," + "  \"footer\": { \"text\": \"IceBoatRacing\" }," + "  \"timestamp\": \"" + Instant.now().toString() + "\"" + "}]}";
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder().uri(URI.create(plugin.discordWebhookUrl)).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)).build();
-                    client.send(request, HttpResponse.BodyHandlers.ofString());
-                } catch (Exception e) { plugin.getLogger().warning("Discord webhook failed: " + e.getMessage()); }
-            }
-        }.runTaskAsynchronously(plugin);
+    public void stopAllMusic() {
+        if (musicTask != null) {
+            musicTask.cancel();
+            musicTask = null;
+        }
+        for (UUID uuid : players)
+            stopMusic(Bukkit.getPlayer(uuid));
     }
 
     private void checkAutoStart() {
-        if (state != RaceState.LOBBY) return;
+        if (state != RaceState.LOBBY)
+            return;
         if (players.size() >= minPlayers) {
             if (autoStartTask == null) {
-                // Changed to use lobbyCountdown instead of startCountdown
                 lobbyCountdown = autoStartDelay;
                 autoStartTask = new BukkitRunnable() {
                     @Override
                     public void run() {
-                        if (state != RaceState.LOBBY || players.size() < minPlayers) { cancelAutoStart(); return; }
-                        if (lobbyCountdown <= 0) { startRace(); cancel(); return; }
-                        if (lobbyCountdown == 60 || lobbyCountdown == 30 || lobbyCountdown == 10 || lobbyCountdown <= 5) {
+                        if (state != RaceState.LOBBY || players.size() < minPlayers) {
+                            cancelAutoStart();
+                            return;
+                        }
+                        if (lobbyCountdown <= 0) {
+                            startRace();
+                            cancel();
+                            return;
+                        }
+                        if (lobbyCountdown == 60 || lobbyCountdown == 30 || lobbyCountdown == 10
+                                || lobbyCountdown <= 5) {
                             for (UUID uuid : players) {
                                 Player p = Bukkit.getPlayer(uuid);
                                 if (p != null) {
-                                    p.sendMessage(plugin.getMessage("race-starting").replaceText(b -> b.matchLiteral("{time}").replacement(String.valueOf(lobbyCountdown))));
+                                    p.sendMessage(plugin.getMessage("race-starting").replaceText(
+                                            b -> b.matchLiteral("{time}").replacement(String.valueOf(lobbyCountdown))));
                                     p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
                                 }
                             }
@@ -848,17 +1259,18 @@ public class RaceArena {
         if (autoStartTask != null) {
             autoStartTask.cancel();
             autoStartTask = null;
-            // Reset logic removed as per previous working logic, but ensuring it cleans up.
-            lobbyCountdown = -1; // Reset value
+            lobbyCountdown = -1;
             updateLobbyScoreboard();
         }
     }
 
     private void updateLobbyScoreboard() {
-        if (state != RaceState.LOBBY) return;
+        if (state != RaceState.LOBBY)
+            return;
         for (UUID uuid : players) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null) setupLobbyScoreboard(p);
+            if (p != null)
+                setupLobbyScoreboard(p);
         }
     }
 
@@ -868,8 +1280,8 @@ public class RaceArena {
         Objective o = b.registerNewObjective("Lobby", Criteria.DUMMY, Component.text("§b§lICE BOAT"));
         o.setDisplaySlot(DisplaySlot.SIDEBAR);
         Team statusTeam = b.registerNewTeam("status");
-        // Changed to use lobbyCountdown variable
-        String statusTxt = (autoStartTask != null && lobbyCountdown >= 0) ? "§eStart: " + lobbyCountdown + "s" : "§fWaiting...";
+        String statusTxt = (autoStartTask != null && lobbyCountdown >= 0) ? "§eStart: " + lobbyCountdown + "s"
+                : "§fWaiting...";
         statusTeam.addEntry("§7");
         statusTeam.suffix(Component.text(statusTxt));
         o.getScore("§7----------------").setScore(6);
@@ -895,19 +1307,22 @@ public class RaceArena {
         o.getScore("§f").setScore(13);
         o.getScore(" ").setScore(12);
         o.getScore("§e§lTOP RACERS").setScore(11);
-        String[] rankKeys = {"§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a"};
+        String[] rankKeys = { "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a" };
         for (int i = 0; i < 10; i++) {
             Utils.createTeam(b, "rank_" + (i + 1), "");
             o.getScore(rankKeys[i]).setScore(10 - i);
             Team t = b.getTeam("rank_" + (i + 1));
-            if (t != null) t.addEntry(rankKeys[i]);
+            if (t != null)
+                t.addEntry(rankKeys[i]);
         }
         Team stats = b.getTeam("stats");
-        if (stats != null) stats.addEntry("§f");
+        if (stats != null)
+            stats.addEntry("§f");
         p.setScoreboard(b);
     }
 
-    private void updateRaceScoreboard(Player p, String time, double speed, int cp, int totalCps, int lap, int maxLaps, List<UUID> ranking) {
+    private void updateRaceScoreboard(Player p, String time, double speed, int cp, int totalCps, int lap, int maxLaps,
+            List<UUID> ranking) {
         Scoreboard b = p.getScoreboard();
         Team stats = b.getTeam("stats");
         if (stats != null) {
@@ -916,7 +1331,8 @@ public class RaceArena {
                 statText = "§bSPECTATING";
             } else {
                 statText = String.format("§f%s §7| §b%.0f km/h §7| §aCP: %d/%d", time, speed, cp, totalCps);
-                if (type == RaceType.LAP) statText += String.format(" §7| §6L%d/%d", lap, maxLaps);
+                if (type == RaceType.LAP || type == RaceType.ELIMINATION)
+                    statText += String.format(" §7| §6L%d/%d", lap, maxLaps);
             }
             stats.suffix(Component.text(statText));
         }
@@ -927,22 +1343,30 @@ public class RaceArena {
                 if (i < ranking.size()) {
                     UUID uuid = ranking.get(i);
                     Player rp = Bukkit.getPlayer(uuid);
-                    String name = (rp != null) ? rp.getName() : "Unknown";
+                    String pName = (rp != null) ? rp.getName() : "Unknown";
                     int pLap = playerLaps.getOrDefault(uuid, 1);
                     String gapStr;
-                    if (i == 0) { gapStr = "§e1st"; } else {
+                    if (i == 0) {
+                        gapStr = "§e1st";
+                    } else {
                         long gap = calculateGapToLeader(uuid, leaderUUID);
-                        if (gap == 0) gapStr = "§7-.-";
-                        else if (gap > 0) gapStr = "§c+" + String.format("%.1f", gap / 1000.0) + "s";
-                        else gapStr = "§a" + String.format("%.1f", gap / 1000.0) + "s";
+                        if (gap == 0)
+                            gapStr = "§7-.-";
+                        else if (gap > 0)
+                            gapStr = "§c+" + String.format("%.1f", gap / 1000.0) + "s";
+                        else
+                            gapStr = "§a" + String.format("%.1f", gap / 1000.0) + "s";
                     }
                     String entry;
                     if (uuid.equals(p.getUniqueId())) {
                         entry = String.format("§f%s §8// §aYou §eL%d", time, pLap);
                     } else {
-                        entry = String.format("%s §8// §f%s §7L%d", gapStr, name, pLap);
+                        entry = String.format("%s §8// §f%s §7L%d", gapStr, pName, pLap);
                     }
-                    if (finishOrder.contains(uuid)) entry = "§a✔ " + name + " §7(Finished)";
+                    if (finishOrder.contains(uuid))
+                        entry = "§a✔ " + pName + " §7(Finished)";
+                    if (eliminatedPlayers.contains(uuid))
+                        entry = "§c✘ " + pName + " §7(Eliminated)";
                     t.suffix(Component.text(entry));
                 } else {
                     t.suffix(Component.text("§7---"));
@@ -952,17 +1376,22 @@ public class RaceArena {
     }
 
     private long calculateGapToLeader(UUID playerUUID, UUID leaderUUID) {
-        if (playerUUID == null || leaderUUID == null) return 0;
-        if (playerUUID.equals(leaderUUID)) return 0;
+        if (playerUUID == null || leaderUUID == null)
+            return 0;
+        if (playerUUID.equals(leaderUUID))
+            return 0;
         int pLap = playerLaps.getOrDefault(playerUUID, 1);
         int pCp = playerCheckpoints.getOrDefault(playerUUID, 0);
         int totalCPs = checkpoints.size();
         int globalIndex = ((pLap - 1) * totalCPs) + pCp - 1;
-        if (globalIndex < 0) return 0;
+        if (globalIndex < 0)
+            return 0;
         Map<Integer, Long> pTimes = checkpointTimestamps.get(playerUUID);
         Map<Integer, Long> lTimes = checkpointTimestamps.get(leaderUUID);
-        if (pTimes == null || lTimes == null) return 0;
-        if (!pTimes.containsKey(globalIndex) || !lTimes.containsKey(globalIndex)) return 0;
+        if (pTimes == null || lTimes == null)
+            return 0;
+        if (!pTimes.containsKey(globalIndex) || !lTimes.containsKey(globalIndex))
+            return 0;
         return pTimes.get(globalIndex) - lTimes.get(globalIndex);
     }
 }

@@ -31,7 +31,8 @@ public class PacketUtils {
                 .write(1, loc.getY())
                 .write(2, loc.getZ());
 
-        // Pitch/Yaw are bytes in some versions, integers/floats in others depending on wrapper.
+        // Pitch/Yaw are bytes in some versions, integers/floats in others depending on
+        // wrapper.
         // ProtocolLib handles this mostly, but standard is (byte) (angle * 256 / 360)
         packet.getBytes()
                 .write(0, (byte) (loc.getPitch() * 256.0F / 360.0F))

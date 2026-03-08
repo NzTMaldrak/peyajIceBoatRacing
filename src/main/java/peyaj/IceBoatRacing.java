@@ -15,6 +15,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import peyaj.commands.RaceTabCompleter;
+import peyaj.cosmetics.EditMode;
+import peyaj.cosmetics.TrailType;
+import peyaj.data.GhostData;
+import peyaj.integration.DiscordWebhook;
+import peyaj.integration.IceBoatPlaceholders;
+import peyaj.replay.ReplayManager;
+import peyaj.social.PartyManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,7 +44,7 @@ public class IceBoatRacing extends JavaPlugin {
     private final Map<UUID, Material> playerCagePreference = new HashMap<>();
     private final Map<UUID, TrailType> playerTrailPreference = new HashMap<>();
 
-    // --- VOTING DATA (RESTORED) ---
+    // --- VOTING DATA ---
     public boolean isVoting = false;
     public int votingTimeRemaining = 0;
     private BukkitTask votingTask;
@@ -47,12 +55,14 @@ public class IceBoatRacing extends JavaPlugin {
     private FileConfiguration messagesConfig;
     private File statsFile;
     private FileConfiguration statsConfig;
-
-    // NEW: Arenas File
     private File arenasFile;
     private FileConfiguration arenasConfig;
 
+    // --- MANAGERS ---
     public GUIManager guiManager;
+    public PartyManager partyManager;
+    public ReplayManager replayManager;
+    public DiscordWebhook discordWebhook;
 
     // --- SETTINGS ---
     public double checkpointRadius = 25.0;
@@ -63,62 +73,6 @@ public class IceBoatRacing extends JavaPlugin {
     public int musicDuration = 180;
     public float musicVolume = 10000.0f;
     public float musicPitch = 1.0f;
-
-    // --- NEW: GHOST DATA ---
-    public static class GhostData {
-        public final List<Location> points = new ArrayList<>();
-        public final String playerName;
-        public final long timeMs;
-
-        public GhostData(String playerName, long timeMs) {
-            this.playerName = playerName;
-            this.timeMs = timeMs;
-        }
-    }
-
-    public enum EditMode {
-        SPAWN("Spawn Points", NamedTextColor.GREEN),
-        CHECKPOINT("Checkpoints", NamedTextColor.RED),
-        FINISH_1("Finish Pos 1", NamedTextColor.AQUA),
-        FINISH_2("Finish Pos 2", NamedTextColor.AQUA),
-        LOBBY("Pre-Lobby", NamedTextColor.GOLD),
-        MAIN_LOBBY("Main Lobby", NamedTextColor.YELLOW),
-        LEADERBOARD("Leaderboard Holo", NamedTextColor.LIGHT_PURPLE);
-
-        public final String name;
-        public final NamedTextColor color;
-        EditMode(String name, NamedTextColor color) { this.name = name; this.color = color; }
-
-        public EditMode next() {
-            int idx = this.ordinal() + 1;
-            if (idx >= values().length) idx = 0;
-            return values()[idx];
-        }
-    }
-
-    public enum TrailType {
-        NONE("None", Material.BARRIER, null, null),
-        SMOKE("Exhaust", Material.CAMPFIRE, org.bukkit.Particle.CAMPFIRE_COSY_SMOKE, null),
-        FLAME("Flame", Material.BLAZE_POWDER, org.bukkit.Particle.FLAME, "race.trail.flame"),
-        HEARTS("Love", Material.POPPY, org.bukkit.Particle.HEART, "race.trail.hearts"),
-        NOTES("Music", Material.NOTE_BLOCK, org.bukkit.Particle.NOTE, "race.trail.notes"),
-        SPARKS("Sparks", Material.FIREWORK_ROCKET, org.bukkit.Particle.FIREWORK, "race.trail.sparks"),
-        MAGIC("Magic", Material.ENCHANTING_TABLE, org.bukkit.Particle.ENCHANT, "race.trail.magic"),
-        ENDER("Void", Material.ENDER_PEARL, org.bukkit.Particle.DRAGON_BREATH, "race.trail.ender"),
-        RAINBOW("Rainbow", Material.NAME_TAG, org.bukkit.Particle.DUST, "race.trail.rainbow");
-
-        public final String name;
-        public final Material icon;
-        public final org.bukkit.Particle particle;
-        public final String permission;
-
-        TrailType(String name, Material icon, org.bukkit.Particle particle, String permission) {
-            this.name = name;
-            this.icon = icon;
-            this.particle = particle;
-            this.permission = permission;
-        }
-    }
 
     @Override
     public void onEnable() {
@@ -144,29 +98,57 @@ public class IceBoatRacing extends JavaPlugin {
 
         loadArenas();
 
+        // Initialize managers
         guiManager = new GUIManager(this);
+        partyManager = new PartyManager(this);
+        replayManager = new ReplayManager(this);
+        discordWebhook = new DiscordWebhook(this);
+
         getServer().getPluginManager().registerEvents(guiManager, this);
 
+        // Register commands with tab completer
         RaceCommand cmd = new RaceCommand(this);
-        if (getCommand("race") != null) Objects.requireNonNull(getCommand("race")).setExecutor(cmd);
-        if (getCommand("iceboat") != null) Objects.requireNonNull(getCommand("iceboat")).setExecutor(cmd);
-        if (getCommand("checkpoint") != null) Objects.requireNonNull(getCommand("checkpoint")).setExecutor(cmd);
+        RaceTabCompleter tabCompleter = new RaceTabCompleter(this);
+
+        if (getCommand("race") != null) {
+            Objects.requireNonNull(getCommand("race")).setExecutor(cmd);
+            Objects.requireNonNull(getCommand("race")).setTabCompleter(tabCompleter);
+        }
+        if (getCommand("iceboat") != null) {
+            Objects.requireNonNull(getCommand("iceboat")).setExecutor(cmd);
+            Objects.requireNonNull(getCommand("iceboat")).setTabCompleter(tabCompleter);
+        }
+        if (getCommand("checkpoint") != null) {
+            Objects.requireNonNull(getCommand("checkpoint")).setExecutor(cmd);
+        }
+        if (getCommand("racequit") != null) {
+            Objects.requireNonNull(getCommand("racequit")).setExecutor(cmd);
+        }
 
         getServer().getPluginManager().registerEvents(new RaceListener(this), this);
 
+        // Main game tick
         new BukkitRunnable() {
             @Override
             public void run() {
-                for (RaceArena arena : arenas.values()) arena.tick();
+                for (RaceArena arena : arenas.values())
+                    arena.tick();
             }
         }.runTaskTimer(this, 0L, 1L);
 
+        // Visualizer tick
         new BukkitRunnable() {
             @Override
             public void run() {
                 Utils.tickVisualizers(IceBoatRacing.this);
             }
         }.runTaskTimer(this, 0L, 10L);
+
+        // Register PlaceholderAPI expansion if available
+        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new IceBoatPlaceholders(this).register();
+            getLogger().info("PlaceholderAPI expansion registered!");
+        }
     }
 
     @Override
@@ -186,10 +168,11 @@ public class IceBoatRacing extends JavaPlugin {
         getLogger().info("Configuration reloaded.");
     }
 
-    // --- VOTING LOGIC (RESTORED) ---
+    // --- VOTING LOGIC ---
 
     public void startVotingRound(int durationSeconds) {
-        if (isVoting) return;
+        if (isVoting)
+            return;
         isVoting = true;
         votingTimeRemaining = durationSeconds;
         playerVotes.clear();
@@ -213,7 +196,8 @@ public class IceBoatRacing extends JavaPlugin {
                 }
 
                 if (votingTimeRemaining == 30 || votingTimeRemaining == 10 || votingTimeRemaining <= 5) {
-                    Bukkit.broadcast(Component.text("Voting ends in " + votingTimeRemaining + "s...", NamedTextColor.GRAY));
+                    Bukkit.broadcast(
+                            Component.text("Voting ends in " + votingTimeRemaining + "s...", NamedTextColor.GRAY));
                 }
 
                 votingTimeRemaining--;
@@ -223,7 +207,8 @@ public class IceBoatRacing extends JavaPlugin {
 
     public void endVotingRound() {
         isVoting = false;
-        if (votingTask != null) votingTask.cancel();
+        if (votingTask != null)
+            votingTask.cancel();
 
         Map<String, Integer> counts = new HashMap<>();
         for (String arena : playerVotes.values()) {
@@ -235,7 +220,8 @@ public class IceBoatRacing extends JavaPlugin {
 
         if (counts.isEmpty()) {
             List<String> keys = new ArrayList<>(arenas.keySet());
-            if (!keys.isEmpty()) winner = keys.get(new Random().nextInt(keys.size()));
+            if (!keys.isEmpty())
+                winner = keys.get(new Random().nextInt(keys.size()));
         } else {
             for (Map.Entry<String, Integer> entry : counts.entrySet()) {
                 if (entry.getValue() > max) {
@@ -277,7 +263,8 @@ public class IceBoatRacing extends JavaPlugin {
     public int getVoteCount(String arenaName) {
         int count = 0;
         for (String s : playerVotes.values()) {
-            if (s.equals(arenaName)) count++;
+            if (s.equals(arenaName))
+                count++;
         }
         return count;
     }
@@ -286,18 +273,27 @@ public class IceBoatRacing extends JavaPlugin {
     private void loadArenasConfig() {
         arenasFile = new File(getDataFolder(), "arenas.yml");
         if (!arenasFile.exists()) {
-            try { arenasFile.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
+            try {
+                arenasFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
         arenasConfig = YamlConfiguration.loadConfiguration(arenasFile);
     }
 
     public void saveArenasConfig() {
-        try { arenasConfig.save(arenasFile); } catch (IOException e) { e.printStackTrace(); }
+        try {
+            arenasConfig.save(arenasFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void loadMessages() {
         messagesFile = new File(getDataFolder(), "messages.yml");
-        if (!messagesFile.exists()) saveResource("messages.yml", false);
+        if (!messagesFile.exists())
+            saveResource("messages.yml", false);
         messagesConfig = YamlConfiguration.loadConfiguration(messagesFile);
     }
 
@@ -314,13 +310,21 @@ public class IceBoatRacing extends JavaPlugin {
     private void loadStats() {
         statsFile = new File(getDataFolder(), "stats.yml");
         if (!statsFile.exists()) {
-            try { statsFile.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
+            try {
+                statsFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
         statsConfig = YamlConfiguration.loadConfiguration(statsFile);
     }
 
     public void saveStats() {
-        try { statsConfig.save(statsFile); } catch (IOException e) { e.printStackTrace(); }
+        try {
+            statsConfig.save(statsFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void incrementStat(UUID uuid, String stat) {
@@ -436,18 +440,20 @@ public class IceBoatRacing extends JavaPlugin {
 
     private void loadArenas() {
         ConfigurationSection section = arenasConfig.getConfigurationSection("arenas");
-        if (section == null) return;
+        if (section == null)
+            return;
 
         for (String key : section.getKeys(false)) {
-            if (arenas.containsKey(key.toLowerCase())) continue;
+            if (arenas.containsKey(key.toLowerCase()))
+                continue;
 
             String path = "arenas." + key;
             RaceArena arena = new RaceArena(key, this);
 
             try {
-                arena.setType(RaceArena.RaceType.valueOf(arenasConfig.getString(path + ".type", "DEFAULT")));
+                arena.setType(peyaj.arena.RaceType.valueOf(arenasConfig.getString(path + ".type", "DEFAULT")));
             } catch (Exception e) {
-                arena.setType(RaceArena.RaceType.DEFAULT);
+                arena.setType(peyaj.arena.RaceType.DEFAULT);
             }
 
             arena.setTotalLaps(arenasConfig.getInt(path + ".laps", 1));
@@ -461,14 +467,19 @@ public class IceBoatRacing extends JavaPlugin {
 
             arena.setFinishLine(
                     arenasConfig.getLocation(path + ".finish1"),
-                    arenasConfig.getLocation(path + ".finish2")
-            );
+                    arenasConfig.getLocation(path + ".finish2"));
 
             List<?> loadedSpawns = arenasConfig.getList(path + ".spawns");
-            if (loadedSpawns != null) for (Object obj : loadedSpawns) if (obj instanceof Location) arena.addSpawn((Location) obj);
+            if (loadedSpawns != null)
+                for (Object obj : loadedSpawns)
+                    if (obj instanceof Location)
+                        arena.addSpawn((Location) obj);
 
             List<?> loadedCheckpoints = arenasConfig.getList(path + ".checkpoints");
-            if (loadedCheckpoints != null) for (Object obj : loadedCheckpoints) if (obj instanceof Location) arena.addCheckpoint((Location) obj);
+            if (loadedCheckpoints != null)
+                for (Object obj : loadedCheckpoints)
+                    if (obj instanceof Location)
+                        arena.addCheckpoint((Location) obj);
 
             ConfigurationSection timeSection = arenasConfig.getConfigurationSection(path + ".best_times");
             if (timeSection != null) {
@@ -477,7 +488,8 @@ public class IceBoatRacing extends JavaPlugin {
                         UUID uuid = UUID.fromString(uuidStr);
                         long time = timeSection.getLong(uuidStr);
                         arena.bestTimes.put(uuid, time);
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
             }
 
@@ -488,14 +500,24 @@ public class IceBoatRacing extends JavaPlugin {
     }
 
     private void sendStartupBanner() {
-        Bukkit.getConsoleSender().sendMessage(Component.text("                                                 ", NamedTextColor.AQUA));
-        Bukkit.getConsoleSender().sendMessage(Component.text("  ___   ____  _____ ____   ___    _  _____ ", NamedTextColor.AQUA));
-        Bukkit.getConsoleSender().sendMessage(Component.text(" |_ _| / ___|| ____| __ ) / _ \\  / \\|_   _|", NamedTextColor.AQUA));
-        Bukkit.getConsoleSender().sendMessage(Component.text("  | | | |    |  _| |  _ \\| | | |/ _ \\ | |  ", NamedTextColor.AQUA));
-        Bukkit.getConsoleSender().sendMessage(Component.text("  | | | |___ | |___| |_) | |_| / ___ \\| |  ", NamedTextColor.AQUA));
-        Bukkit.getConsoleSender().sendMessage(Component.text(" |___| \\____||_____|____/ \\___/_/   \\_\\_|  ", NamedTextColor.AQUA));
-        Bukkit.getConsoleSender().sendMessage(Component.text("                                                 ", NamedTextColor.AQUA));
-        String versionInfo = "   v" + getPluginMeta().getVersion() + " by " + String.join(", ", getPluginMeta().getAuthors()) + " enabled!";
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text("                                                 ", NamedTextColor.AQUA));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text("  ___   ____  _____ ____   ___    _  _____ ", NamedTextColor.AQUA));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text(" |_ _| / ___|| ____| __ ) / _ \\  / \\|_   _|", NamedTextColor.AQUA));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text("  | | | |    |  _| |  _ \\| | | |/ _ \\ | |  ", NamedTextColor.AQUA));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text("  | | | |___ | |___| |_) | |_| / ___ \\| |  ", NamedTextColor.AQUA));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text(" |___| \\____||_____|____/ \\___/_/   \\_\\_|  ", NamedTextColor.AQUA));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text("                                                 ", NamedTextColor.AQUA));
+        String versionInfo = "   v" + getPluginMeta().getVersion() + " by "
+                + String.join(", ", getPluginMeta().getAuthors()) + " enabled!";
         Bukkit.getConsoleSender().sendMessage(Component.text(versionInfo, NamedTextColor.GREEN));
+        Bukkit.getConsoleSender()
+                .sendMessage(Component.text("   Parties, Replays, 17 Trails, PAPI Support", NamedTextColor.YELLOW));
     }
 }
