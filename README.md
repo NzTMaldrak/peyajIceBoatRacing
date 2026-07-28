@@ -1,56 +1,55 @@
-# 🛥️ IceBoatRacing v3.0
+# IceBoatRacing v3.0
 
-![Version](https://img.shields.io/badge/Paper-1.20+-blue?style=for-the-badge&logo=paper)
+![Version](https://img.shields.io/badge/Paper-1.21.x--26.2-blue?style=for-the-badge&logo=paper)
 ![Version](https://img.shields.io/badge/Version-3.0-green?style=for-the-badge)
 ![Maintenance](https://img.shields.io/badge/Author-peyaj-orange?style=for-the-badge)
 
-*A feature-rich, competitive Ice Boat Racing plugin for Paper **1.20-1.21+**.*
+*A feature-rich, competitive Ice Boat Racing plugin for Paper **1.21.x - 26.2**.*
 
 ![Preview](https://i.imgur.com/z8kkRxi.gif)
 
 ---
 
-## ❄️ Features Overview
+## Features Overview
 
-### 🏁 Core Racing
+### Core Racing
 - **Multi-Arena Support** - Run multiple races simultaneously
 - **Race Modes** - DEFAULT (Sprint), LAP (Looping), ELIMINATION (Last place eliminated each lap)
 - **Ray-Traced Physics** - Detects checkpoints at **100km/h+** without skipping
 - **Visual Editor** - Wand tool with real-time particle visualization
 
-### 🎮 v3.0 New Features
+### v3.0 New Features
 
 | Feature | Description |
 |---------|-------------|
-| 👥 **Party System** | Create parties, invite friends, race together (max 8) |
-| 🎬 **Race Replays** | Hypixel-style replay playback of completed races |
-| 👻 **Enhanced Ghosts** | Race against server best times with fake packet boats |
-| 🚦 **Traffic Light Start** | Colored particle countdown (Red → Yellow → Green) |
-| 🎆 **Victory Celebrations** | Fireworks and broadcasts for race winners |
-| 💀 **Elimination Mode** | Last place eliminated each lap |
-| 📺 **Spectator Modes** | Free-fly, Follow Leader, Follow Player cameras |
-| ✨ **17 Particle Trails** | Rainbow, Electric, Sculk, Cherry, Lava, and more |
-| 🏷️ **Titles System** | Unlockable ranks based on wins |
-| 📊 **PlaceholderAPI** | Stats placeholders for scoreboards |
-| 💬 **Discord Integration** | Rich embeds for race results and records |
+| **Party System** | Create parties, invite friends, race together (max 8) |
+| **Race Replays** | Hypixel-style replay playback of completed races |
+| **Enhanced Ghosts** | Race against server best times with fake packet boats |
+| **Traffic Light Start** | Colored particle countdown (Red -> Yellow -> Green) |
+| **Victory Celebrations** | Fireworks and broadcasts for race winners |
+| **Elimination Mode** | Last place eliminated each lap |
+| **Spectator Modes** | Free-fly, Follow Leader, Follow Player cameras |
+| **17 Particle Trails** | Rainbow, Electric, Sculk, Cherry, Lava, and more |
+| **Titles System** | Unlockable ranks based on wins |
+| **PlaceholderAPI** | Stats placeholders for scoreboards |
+| **Discord Integration** | Rich embeds for race results and records |
 
 ---
 
-## 📥 Installation
+## Installation
 
 1. **Requirements:**
-   - Paper 1.20+ server
-   - [DecentHolograms](https://www.spigotmc.org/resources/decentholograms.96927/) (for leaderboards)
-   - [ProtocolLib](https://www.spigotmc.org/resources/protocollib.1997/) (for ghosts)
+   - Paper 1.21.x - 26.2 server
+   - Standalone (Built-in PacketEvents & TextDisplay Hologram Engine - No ProtocolLib or DecentHolograms required!)
    - *(Optional)* [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/)
 
-2. Download `IceBoatRacing.jar` and place in `/plugins`
+2. Download `IceBoatRacing-3.0.jar` and place in `/plugins`
 3. **Restart** the server (do not use `/reload`)
 4. Configure `config.yml` as needed
 
 ---
 
-## 🛠️ Commands
+## Commands
 
 | Command | Description | Permission |
 |---------|-------------|------------|
@@ -74,7 +73,7 @@
 
 ---
 
-## 📊 PlaceholderAPI Placeholders
+## PlaceholderAPI Placeholders
 
 | Placeholder | Description |
 |-------------|-------------|
@@ -90,25 +89,25 @@
 
 ---
 
-## 🎨 Particle Trails
+## Particle Trails
 
 Unlockable trails with permissions:
-- `race.trail.smoke` → Smoke
-- `race.trail.flame` → Flame  
-- `race.trail.soul` → Soul Fire
-- `race.trail.rainbow` → Rainbow (HSB color cycling)
-- `race.trail.electric` → Electric Spark
-- `race.trail.sculk` → Sculk (Deep Dark themed)
-- `race.trail.honey` → Dripping Honey
-- `race.trail.lava` → Lava Drip
-- `race.trail.cherry` → Cherry Blossom
-- `race.trail.snow` → Snowflake
-- `race.trail.water` → Water Splash
+- `race.trail.smoke` -> Smoke
+- `race.trail.flame` -> Flame  
+- `race.trail.soul` -> Soul Fire
+- `race.trail.rainbow` -> Rainbow (HSB color cycling)
+- `race.trail.electric` -> Electric Spark
+- `race.trail.sculk` -> Sculk (Deep Dark themed)
+- `race.trail.honey` -> Dripping Honey
+- `race.trail.lava` -> Lava Drip
+- `race.trail.cherry` -> Cherry Blossom
+- `race.trail.snow` -> Snowflake
+- `race.trail.water` -> Water Splash
 - And more!
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 All features are configurable in `config.yml`:
 - Checkpoint detection radius
@@ -122,9 +121,12 @@ All features are configurable in `config.yml`:
 
 ---
 
-## 📝 Changelog
+## Changelog
 
 ### v3.0 (Major Update)
+- Upgraded to Paper 1.21.x - 26.2
+- Migrated to PacketEvents (bundled via shading)
+- Built-in standalone TextDisplay Hologram system
 - Added Elimination race mode
 - Added Party system (up to 8 players)
 - Added Race replays
@@ -135,11 +137,10 @@ All features are configurable in `config.yml`:
 - Added PlaceholderAPI integration
 - Added Discord webhook embeds
 - Added configurable titles/ranks
-- **Added robust Anti-Cheat & Edge Case protections (Void bug fix, blocked damage/hunger, disabled inventory moving)**
-- **Added Anti-Griefing protections (Blocked block breaking/placing in arenas)**
-- **Added Anti-Cheating protections (Blocked `/tp`, `/spawn`, and Ender Pearls)**
+- Added Anti-Cheat & Edge Case protections (Void bug fix, blocked damage/hunger, disabled inventory moving)
+- Added Anti-Griefing protections (Blocked block breaking/placing in arenas)
+- Added Anti-Cheating protections (Blocked `/tp`, `/spawn`, and Ender Pearls)
 - Reorganized code into modular packages
-- Updated to Paper API 1.21.1
 
 ### v2.0
 - Initial public release
@@ -149,6 +150,6 @@ All features are configurable in `config.yml`:
 
 ---
 
-## 📄 License
+## License
 
 MIT License - Feel free to modify and use!
