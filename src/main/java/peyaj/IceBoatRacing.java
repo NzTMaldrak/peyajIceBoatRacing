@@ -100,7 +100,6 @@ public class IceBoatRacing extends JavaPlugin {
         // Load Arenas from dedicated file
         loadArenasConfig();
 
-        // MIGRATION CHECK: Move arenas from config.yml to arenas.yml
         if (getConfig().contains("arenas")) {
             getLogger().info("Migrating arenas from config.yml to arenas.yml...");
             arenasConfig.set("arenas", getConfig().getConfigurationSection("arenas"));

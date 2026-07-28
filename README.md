@@ -6,6 +6,8 @@
 
 *A feature-rich, competitive Ice Boat Racing plugin for Paper **1.20-1.21+**.*
 
+![Preview](https://i.imgur.com/z8kkRxi.gif)
+
 ---
 
 ## ❄️ Features Overview

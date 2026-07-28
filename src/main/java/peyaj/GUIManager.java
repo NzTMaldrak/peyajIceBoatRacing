@@ -43,8 +43,6 @@ public class GUIManager implements Listener {
         this.raceWandKey = new NamespacedKey(plugin, "race_wand");
     }
 
-    // --- MENUS ---
-
     public void openMainMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27, Component.text("IceBoat Racing", NamedTextColor.AQUA));
 
@@ -184,7 +182,7 @@ public class GUIManager implements Listener {
         // Admin Vote Button
         inv.setItem(22, createItem(Material.BEACON, "&e&lStart Vote", "&7Force start voting round"));
 
-        // NEW: Setup Guide Book
+        // Setup Guide Book
         inv.setItem(8, createItem(Material.BOOK, "&b&lSetup Guide", "&7Get the instruction book"));
 
         inv.setItem(26, createItem(Material.ARROW, "&cBack", "&7Return to Main Menu"));
@@ -220,7 +218,6 @@ public class GUIManager implements Listener {
         for (RaceArena arena : plugin.getArenas().values()) {
             String status = (arena.getState() == RaceState.LOBBY) ? "&aOPEN" : "&cRUNNING";
 
-            // --- UPDATED LORE WITH CLEAR INSTRUCTIONS ---
             String loreAction;
             if (adminMode) {
                 loreAction = "&eClick to Edit";
@@ -304,7 +301,6 @@ public class GUIManager implements Listener {
                 .append(Component.text("2. Place §cCheckpoints§r along the track.\n\n"))
                 .append(Component.text("3. Set §bFinish Line§r (2 points to make a box).\n"));
 
-        // Page 3: Finalizing
         Component p3 = Component.text("§lFinalizing:\n\n")
                 .append(Component.text("4. Set §6Lobby§r (waiting area).\n\n"))
                 .append(Component.text("5. Click 'Visualizer' in GUI to see your nodes.\n\n"))
@@ -512,17 +508,14 @@ public class GUIManager implements Listener {
                                         NamedTextColor.RED));
                                 p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
                             } else {
-                                // Fallback handled inside addPlayer too, but we can do a soft check
                                 arena.addPlayer(p, true); // true = Time Trial
                             }
                         }
                     } else {
-                        // Regular Join / Spectate Request
                         if (arena != null) {
                             if (arena.getState() == RaceState.LOBBY) {
                                 p.performCommand("race join " + arenaName);
                             } else {
-                                // Auto-Spectate if running
                                 arena.addSpectator(p);
                             }
                         }
