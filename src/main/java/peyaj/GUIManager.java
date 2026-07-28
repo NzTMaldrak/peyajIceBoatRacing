@@ -23,6 +23,9 @@ import peyaj.arena.RaceType;
 import peyaj.cosmetics.EditMode;
 import peyaj.cosmetics.TrailType;
 
+import java.util.*;
+import java.util.stream.Collectors;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -599,17 +602,18 @@ public class GUIManager implements Listener {
     private ItemStack createItem(Material mat, String name, String... lore) {
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
-        meta.displayName(
-                LegacyComponentSerializer.legacyAmpersand().deserialize(name).decoration(TextDecoration.ITALIC, false));
-        if (lore.length > 0) {
-            List<String> loreStrings = Arrays.stream(lore)
-                    .map(s -> LegacyComponentSerializer.legacyAmpersand().deserialize(s)
-                            .decoration(TextDecoration.ITALIC, false))
-                    .map(LegacyComponentSerializer.legacySection()::serialize)
-                    .toList();
-            meta.setLore(loreStrings);
+        if (meta != null) {
+            meta.displayName(
+                    LegacyComponentSerializer.legacyAmpersand().deserialize(name).decoration(TextDecoration.ITALIC, false));
+            if (lore.length > 0) {
+                List<Component> loreComponents = Arrays.stream(lore)
+                        .map(s -> LegacyComponentSerializer.legacyAmpersand().deserialize(s)
+                                .decoration(TextDecoration.ITALIC, false))
+                        .collect(Collectors.toList());
+                meta.lore(loreComponents);
+            }
+            item.setItemMeta(meta);
         }
-        item.setItemMeta(meta);
         return item;
     }
 

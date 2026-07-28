@@ -115,15 +115,22 @@ public class Utils {
         return t;
     }
 
-    // --- BOAT TYPE (deprecated in 1.21.2 but still functional) ---
-    @SuppressWarnings("deprecation")
-    public static void assignRandomBoatType(Boat boat) {
-        Boat.Type[] types = {
-                Boat.Type.OAK, Boat.Type.SPRUCE, Boat.Type.BIRCH,
-                Boat.Type.JUNGLE, Boat.Type.ACACIA, Boat.Type.DARK_OAK,
-                Boat.Type.MANGROVE, Boat.Type.CHERRY, Boat.Type.BAMBOO
-        };
-        boat.setBoatType(types[ThreadLocalRandom.current().nextInt(types.length)]);
+    // --- BOAT SPAWNING (Paper 1.21+ / 26.2 compatible) ---
+    private static final org.bukkit.entity.EntityType[] BOAT_TYPES = {
+            org.bukkit.entity.EntityType.OAK_BOAT,
+            org.bukkit.entity.EntityType.SPRUCE_BOAT,
+            org.bukkit.entity.EntityType.BIRCH_BOAT,
+            org.bukkit.entity.EntityType.JUNGLE_BOAT,
+            org.bukkit.entity.EntityType.ACACIA_BOAT,
+            org.bukkit.entity.EntityType.DARK_OAK_BOAT,
+            org.bukkit.entity.EntityType.MANGROVE_BOAT,
+            org.bukkit.entity.EntityType.CHERRY_BOAT,
+            org.bukkit.entity.EntityType.BAMBOO_RAFT
+    };
+
+    public static Boat spawnRandomBoat(Location loc) {
+        org.bukkit.entity.EntityType selectedType = BOAT_TYPES[ThreadLocalRandom.current().nextInt(BOAT_TYPES.length)];
+        return (Boat) loc.getWorld().spawnEntity(loc, selectedType);
     }
 
     // --- TIME FORMATTING ---
@@ -157,6 +164,8 @@ public class Utils {
 
     // --- TRAIL LOGIC WITH ALL NEW TRAILS ---
     public static void spawnTrailParticles(Player p, Boat boat, TrailType trail) {
+        if (boat == null || boat.isDead())
+            return;
         if (trail == null || trail == TrailType.NONE || trail.particle == null)
             return;
         Location loc = boat.getLocation().clone().add(0, 0.3, 0);

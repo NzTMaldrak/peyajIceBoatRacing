@@ -15,10 +15,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import com.github.retrooper.packetevents.PacketEvents;
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import peyaj.commands.RaceTabCompleter;
 import peyaj.cosmetics.EditMode;
 import peyaj.cosmetics.TrailType;
 import peyaj.data.GhostData;
+import peyaj.hologram.HologramManager;
 import peyaj.integration.DiscordWebhook;
 import peyaj.integration.IceBoatPlaceholders;
 import peyaj.replay.ReplayManager;
@@ -63,6 +66,7 @@ public class IceBoatRacing extends JavaPlugin {
     public PartyManager partyManager;
     public ReplayManager replayManager;
     public DiscordWebhook discordWebhook;
+    public HologramManager hologramManager;
 
     // --- SETTINGS ---
     public double checkpointRadius = 25.0;
@@ -75,7 +79,17 @@ public class IceBoatRacing extends JavaPlugin {
     public float musicPitch = 1.0f;
 
     @Override
+    public void onLoad() {
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        PacketEvents.getAPI().getSettings().checkForUpdates(false).bStats(false);
+        PacketEvents.getAPI().load();
+    }
+
+    @Override
     public void onEnable() {
+        PacketEvents.getAPI().init();
+        hologramManager = new HologramManager(this);
+
         sendStartupBanner();
 
         saveDefaultConfig();
@@ -156,8 +170,15 @@ public class IceBoatRacing extends JavaPlugin {
         for (RaceArena arena : arenas.values()) {
             arena.stopRace();
         }
+        if (hologramManager != null) {
+            hologramManager.removeAll();
+        }
         saveArenas();
         saveStats();
+        try {
+            PacketEvents.getAPI().terminate();
+        } catch (Exception ignored) {
+        }
     }
 
     public void reload() {
@@ -519,5 +540,9 @@ public class IceBoatRacing extends JavaPlugin {
         Bukkit.getConsoleSender().sendMessage(Component.text(versionInfo, NamedTextColor.GREEN));
         Bukkit.getConsoleSender()
                 .sendMessage(Component.text("   Parties, Replays, 17 Trails, PAPI Support", NamedTextColor.YELLOW));
+    }
+
+    public HologramManager getHologramManager() {
+        return hologramManager;
     }
 }

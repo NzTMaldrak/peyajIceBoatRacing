@@ -1,15 +1,11 @@
 package peyaj;
 
-import eu.decentsoftware.holograms.api.DHAPI;
-import eu.decentsoftware.holograms.api.holograms.Hologram;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.*;
 import org.bukkit.entity.Boat;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -26,7 +22,6 @@ import peyaj.cosmetics.TrailType;
 import peyaj.data.GhostData;
 import peyaj.replay.ReplayData;
 
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -226,16 +221,10 @@ public class RaceArena {
 
     // --- HOLOGRAMS ---
     public void updateLeaderboardHologram() {
-        if (leaderboardLocation == null)
+        if (leaderboardLocation == null || plugin.getHologramManager() == null)
             return;
         try {
             String holoName = "race_lb_" + name;
-            Hologram holo = DHAPI.getHologram(holoName);
-            if (holo == null) {
-                holo = DHAPI.createHologram(holoName, leaderboardLocation);
-            } else {
-                DHAPI.moveHologram(holo, leaderboardLocation);
-            }
             List<String> lines = new ArrayList<>();
             lines.add("&b&l❄ " + name.toUpperCase() + " LEADERBOARD ❄");
             lines.add("&7------------------------");
@@ -253,8 +242,15 @@ public class RaceArena {
             if (limit == 0)
                 lines.add("&7No records yet!");
             lines.add("&7------------------------");
-            DHAPI.setHologramLines(holo, lines);
-        } catch (NoClassDefFoundError e) {
+            plugin.getHologramManager().createOrUpdateHologram(holoName, leaderboardLocation, lines);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to update leaderboard hologram for " + name + ": " + e.getMessage());
+        }
+    }
+
+    public void deleteLeaderboardHologram() {
+        if (plugin.getHologramManager() != null) {
+            plugin.getHologramManager().removeHologram("race_lb_" + name);
         }
     }
 
@@ -513,8 +509,7 @@ public class RaceArena {
 
             spawnIndex++;
             p.teleport(spawn);
-            Boat boat = (Boat) p.getWorld().spawnEntity(spawn, EntityType.BOAT);
-            Utils.assignRandomBoatType(boat);
+            Boat boat = Utils.spawnRandomBoat(spawn);
             boat.addPassenger(p);
             boat.setInvulnerable(true);
             playerBoats.put(uuid, boat);
@@ -1036,8 +1031,7 @@ public class RaceArena {
         p.teleport(loc);
         p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
         lastLocations.put(p.getUniqueId(), loc);
-        Boat boat = (Boat) p.getWorld().spawnEntity(loc, EntityType.BOAT);
-        Utils.assignRandomBoatType(boat);
+        Boat boat = Utils.spawnRandomBoat(loc);
         boat.addPassenger(p);
         boat.setInvulnerable(true);
         playerBoats.put(p.getUniqueId(), boat);
