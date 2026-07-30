@@ -43,6 +43,10 @@
                                     <pattern>com.github.retrooper.packetevents</pattern>
                                     <shadedPattern>peyaj.lib.packetevents</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>io.github.retrooper.packetevents</pattern>
+                                    <shadedPattern>peyaj.lib.packetevents.impl</shadedPattern>
+                                </relocation>
                             </relocations>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
@@ -87,7 +91,7 @@
         <dependency>
             <groupId>com.github.retrooper</groupId>
             <artifactId>packetevents-spigot</artifactId>
-            <version>2.7.0</version>
+            <version>2.13.0</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

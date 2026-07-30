@@ -172,8 +172,12 @@ public class IceBoatRacing extends JavaPlugin {
         if (hologramManager != null) {
             hologramManager.removeAll();
         }
-        saveArenas();
-        saveStats();
+        if (arenasConfig != null) {
+            saveArenas();
+        }
+        if (statsConfig != null) {
+            saveStats();
+        }
         try {
             PacketEvents.getAPI().terminate();
         } catch (Exception ignored) {
