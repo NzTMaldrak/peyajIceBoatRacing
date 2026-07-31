@@ -173,25 +173,25 @@ public class RaceListener implements Listener {
     public void onBoatMove(VehicleMoveEvent e) {
         if (!(e.getVehicle() instanceof Boat boat))
             return;
-        if (boat.getPassengers().isEmpty())
+        if (boat.getPassengers().isEmpty() || !(boat.getPassengers().get(0) instanceof Player))
             return;
-        if (!(boat.getPassengers().get(0) instanceof Player))
-            return;
+
+        // Ensure step height is set for Paper native smooth stepping
+        try {
+            boat.setStepHeight(1.25f);
+        } catch (Throwable ignored) {
+        }
 
         Location from = e.getFrom();
         Location to = e.getTo();
-        
+
         Vector velocity = boat.getVelocity();
         double speed = velocity.clone().setY(0).length();
-        
-        // If speed is very low, check if the player ACTUALLY tried to move (from -> to distance)
-        // because hitting a wall sets velocity to 0.
+
         double moveDist = from.distanceSquared(to);
         if (speed < 0.02 && moveDist < 0.0001)
             return;
 
-        // Use the boat's facing direction instead of velocity vector.
-        // When a boat hits a wall, velocity becomes 0, which breaks velocity-based normalization.
         Vector direction = boat.getLocation().getDirection().setY(0);
         if (direction.lengthSquared() < 0.0001)
             return;
@@ -199,8 +199,8 @@ public class RaceListener implements Listener {
 
         Location boatLoc = boat.getLocation();
 
-        // 1-Tick Kinematic Bypass: check exactly 1 tick ahead based on current speed
-        double[] offsets = { 0.75, 0.75 + speed * 1.0 };
+        // Check 1 to 2 ticks ahead for step-ups (staircase gliding)
+        double[] offsets = { 0.6, 1.2, 1.2 + speed * 0.8 };
         boolean isClimbing = false;
 
         for (double offset : offsets) {
@@ -210,38 +210,33 @@ public class RaceListener implements Listener {
             if (!wallBlock.getType().isSolid())
                 continue;
 
-            // Found a wall — check if there's space above to climb into
+            // Restrict smooth staircase climbing exclusively to ICE block types
+            if (!Utils.isIceBlock(wallBlock.getType()))
+                continue;
+
             Block aboveWall = wallBlock.getRelative(org.bukkit.block.BlockFace.UP);
             Block twoAboveWall = aboveWall.getRelative(org.bukkit.block.BlockFace.UP);
 
             if (!aboveWall.getType().isSolid() && !twoAboveWall.getType().isSolid()) {
-                
-                // Calculate exactly how high we need to go to clear the wall block (Y + 1.0)
                 double diffY = (wallBlock.getY() + 1.0) - boatLoc.getY();
-                
-                // If the block is within a valid step height
-                if (diffY > 0 && diffY <= 1.2) {
-                    
-                    // KINEMATIC BYPASS: Assign exactly enough vertical velocity to clear the block in 1 tick.
-                    // This forces the boat above the block *before* the client processes the horizontal collision.
-                    double climbY = diffY + 0.15;
-                    
-                    // Launch diagonally perfectly maintaining horizontal speed
-                    boat.setVelocity(direction.clone().multiply(speed).setY(climbY));
+
+                // Smooth staircase climb (up to 1.25 blocks per step)
+                if (diffY > 0.05 && diffY <= 1.25) {
+                    double climbY = Math.min(0.25, diffY * 0.2 + 0.1);
+                    double forwardSpeed = Math.max(speed, 0.35);
+
+                    boat.setVelocity(direction.clone().multiply(forwardSpeed).setY(climbY));
                     isClimbing = true;
-                    break; 
+                    break;
                 }
             }
         }
-        
-        // HOP CANCELLATION:
-        // If we didn't detect a wall in front (meaning we reached the top of the block),
-        // BUT we still have upward momentum from climbing
-        if (!isClimbing && velocity.getY() > 0.1) {
+
+        // Stick smoothly to block top after climb (staircase effect)
+        if (!isClimbing && velocity.getY() > 0.05) {
             Block below = boatLoc.clone().subtract(0, 0.1, 0).getBlock();
-            if (below.getType().isSolid()) {
-                // We cleared the wall and are now over the block! Kill upward velocity to stick to it!
-                boat.setVelocity(direction.clone().multiply(speed).setY(-0.1));
+            if (below.getType().isSolid() && Utils.isIceBlock(below.getType())) {
+                boat.setVelocity(direction.clone().multiply(Math.max(speed, 0.3)).setY(0));
             }
         }
     }
@@ -254,8 +249,10 @@ public class RaceListener implements Listener {
             return;
 
         Block block = e.getBlock();
+        // Restrict collision climbing strictly to ICE block types
+        if (!Utils.isIceBlock(block.getType()))
+            return;
 
-        // Get direction toward the collision block
         Vector toBlock = block.getLocation().add(0.5, 0, 0.5).toVector()
                 .subtract(boat.getLocation().toVector()).setY(0);
         if (toBlock.lengthSquared() < 0.0001)
@@ -267,18 +264,11 @@ public class RaceListener implements Listener {
 
         if (!aboveBlock.getType().isSolid() && !twoAbove.getType().isSolid()) {
             double diffY = (block.getY() + 1.0) - boat.getLocation().getY();
-            
-            if (diffY > 0 && diffY <= 1.2) {
-                // KINEMATIC BYPASS fallback for standstill collisions
-                double climbY = diffY + 0.15;
-                
+
+            if (diffY > 0 && diffY <= 1.25) {
                 Vector vel = boat.getVelocity();
-                double horizontalSpeed = vel.clone().setY(0).length();
-                
-                // Nudge it slightly forward so it clears the lip even from a standstill bump
-                horizontalSpeed = Math.max(0.4, horizontalSpeed);
-                
-                boat.setVelocity(direction.clone().multiply(horizontalSpeed).setY(climbY));
+                double horizontalSpeed = Math.max(0.45, vel.clone().setY(0).length());
+                boat.setVelocity(direction.clone().multiply(horizontalSpeed).setY(0.2));
             }
         }
     }

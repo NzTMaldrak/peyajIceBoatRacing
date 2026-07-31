@@ -130,7 +130,20 @@ public class Utils {
 
     public static Boat spawnRandomBoat(Location loc) {
         org.bukkit.entity.EntityType selectedType = BOAT_TYPES[ThreadLocalRandom.current().nextInt(BOAT_TYPES.length)];
-        return (Boat) loc.getWorld().spawnEntity(loc, selectedType);
+        Boat boat = (Boat) loc.getWorld().spawnEntity(loc, selectedType);
+        try {
+            boat.setStepHeight(1.25f);
+        } catch (Throwable ignored) {
+        }
+        return boat;
+    }
+
+    public static boolean isIceBlock(org.bukkit.Material mat) {
+        if (mat == null) return false;
+        return mat == org.bukkit.Material.ICE
+                || mat == org.bukkit.Material.PACKED_ICE
+                || mat == org.bukkit.Material.BLUE_ICE
+                || mat == org.bukkit.Material.FROSTED_ICE;
     }
 
     // --- TIME FORMATTING (Zero-allocation string building) ---
