@@ -26,6 +26,7 @@ import peyaj.integration.DiscordWebhook;
 import peyaj.integration.IceBoatPlaceholders;
 import peyaj.replay.ReplayManager;
 import peyaj.social.PartyManager;
+import peyaj.utils.AsyncIO;
 
 import java.io.File;
 import java.io.IOException;
@@ -307,10 +308,8 @@ public class IceBoatRacing extends JavaPlugin {
     }
 
     public void saveArenasConfig() {
-        try {
-            arenasConfig.save(arenasFile);
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (arenasConfig != null && arenasFile != null) {
+            AsyncIO.saveConfigAsync(arenasConfig, arenasFile, this);
         }
     }
 
@@ -344,10 +343,8 @@ public class IceBoatRacing extends JavaPlugin {
     }
 
     public void saveStats() {
-        try {
-            statsConfig.save(statsFile);
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (statsConfig != null && statsFile != null) {
+            AsyncIO.saveConfigAsync(statsConfig, statsFile, this);
         }
     }
 

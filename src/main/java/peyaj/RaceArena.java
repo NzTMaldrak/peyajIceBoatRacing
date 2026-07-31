@@ -1064,23 +1064,40 @@ public class RaceArena {
     private List<UUID> calculateRankings() {
         List<UUID> rankList = new ArrayList<>(players);
         rankList.removeAll(eliminatedPlayers);
+
+        // Pre-build index lookup map for finish order (O(1) lookups during sort)
+        Map<UUID, Integer> finishIndexMap = new HashMap<>(finishOrder.size());
+        for (int i = 0; i < finishOrder.size(); i++) {
+            finishIndexMap.put(finishOrder.get(i), i);
+        }
+
+        // Pre-calculate squared distance to current target per player (O(1) lookups during sort)
+        Map<UUID, Double> distanceMap = new HashMap<>(rankList.size());
+        for (UUID u : rankList) {
+            if (!finishIndexMap.containsKey(u)) {
+                int cp = playerCheckpoints.getOrDefault(u, 0);
+                distanceMap.put(u, getDistanceToTarget(u, cp));
+            }
+        }
+
         rankList.sort((u1, u2) -> {
-            boolean f1 = finishOrder.contains(u1);
-            boolean f2 = finishOrder.contains(u2);
-            if (f1 != f2)
-                return f1 ? -1 : 1;
-            if (f1)
-                return Integer.compare(finishOrder.indexOf(u1), finishOrder.indexOf(u2));
+            Integer f1 = finishIndexMap.get(u1);
+            Integer f2 = finishIndexMap.get(u2);
+            if (f1 != null && f2 != null) return Integer.compare(f1, f2);
+            if (f1 != null) return -1;
+            if (f2 != null) return 1;
+
             int l1 = playerLaps.getOrDefault(u1, 1), l2 = playerLaps.getOrDefault(u2, 1);
-            if (l1 != l2)
-                return Integer.compare(l2, l1);
+            if (l1 != l2) return Integer.compare(l2, l1);
+
             int c1 = playerCheckpoints.getOrDefault(u1, 0), c2 = playerCheckpoints.getOrDefault(u2, 0);
-            if (c1 != c2)
-                return Integer.compare(c2, c1);
-            double d1 = getDistanceToTarget(u1, c1);
-            double d2 = getDistanceToTarget(u2, c2);
+            if (c1 != c2) return Integer.compare(c2, c1);
+
+            double d1 = distanceMap.getOrDefault(u1, Double.MAX_VALUE);
+            double d2 = distanceMap.getOrDefault(u2, Double.MAX_VALUE);
             return Double.compare(d1, d2);
         });
+
         return rankList;
     }
 
@@ -1095,9 +1112,13 @@ public class RaceArena {
             target = finishCenter;
         else
             target = finishPos1;
-        if (target == null || !p.getWorld().equals(target.getWorld()))
+        if (target == null || target.getWorld() == null || !p.getWorld().equals(target.getWorld()))
             return Double.MAX_VALUE;
-        return p.getLocation().distanceSquared(target);
+
+        double dx = p.getLocation().getX() - target.getX();
+        double dy = p.getLocation().getY() - target.getY();
+        double dz = p.getLocation().getZ() - target.getZ();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private void highlightNextTarget(Player p, UUID uuid) {
@@ -1109,8 +1130,8 @@ public class RaceArena {
             target = finishCenter;
         else
             target = finishPos1;
-        if (target != null)
-            p.spawnParticle(Particle.HAPPY_VILLAGER, target.clone().add(0, 1.5, 0), 2, 0.2, 0.2, 0.2, 0);
+        if (target != null && target.getWorld() != null && target.getWorld().equals(p.getWorld()))
+            p.spawnParticle(Particle.HAPPY_VILLAGER, target.getX(), target.getY() + 1.5, target.getZ(), 2, 0.2, 0.2, 0.2, 0);
     }
 
     private void createCage(Location spawn, UUID uuid) {

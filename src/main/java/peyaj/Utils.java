@@ -133,33 +133,53 @@ public class Utils {
         return (Boat) loc.getWorld().spawnEntity(loc, selectedType);
     }
 
-    // --- TIME FORMATTING ---
+    // --- TIME FORMATTING (Zero-allocation string building) ---
     public static String formatTime(long millis) {
         long totalSeconds = millis / 1000;
-        int minutes = (int) (totalSeconds / 60);
-        int seconds = (int) (totalSeconds % 60);
-        int ms = (int) ((millis % 1000) / 10);
-        return String.format("%d:%02d.%02d", minutes, seconds, ms);
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        long ms = (millis % 1000) / 10;
+        
+        StringBuilder sb = new StringBuilder(10);
+        sb.append(minutes).append(':');
+        if (seconds < 10) sb.append('0');
+        sb.append(seconds).append('.');
+        if (ms < 10) sb.append('0');
+        sb.append(ms);
+        return sb.toString();
     }
 
+    // --- ZERO-ALLOCATION KINEMATIC GEOMETRY ---
     public static boolean lineSegmentIntersectsSphere(Location p1, Location p2, Location sphereCenter, double radius) {
         if (p1 == null || p2 == null || sphereCenter == null)
             return false;
-        if (p1.getWorld() == null || !p1.getWorld().equals(p2.getWorld())
-                || !p1.getWorld().equals(sphereCenter.getWorld()))
+        org.bukkit.World w = p1.getWorld();
+        if (w == null || !w.equals(p2.getWorld()) || !w.equals(sphereCenter.getWorld()))
             return false;
-        Vector d = p2.toVector().subtract(p1.toVector());
-        Vector f = p1.toVector().subtract(sphereCenter.toVector());
-        double a = d.dot(d);
-        double b = 2 * f.dot(d);
-        double c = f.dot(f) - radius * radius;
+
+        double dx = p2.getX() - p1.getX();
+        double dy = p2.getY() - p1.getY();
+        double dz = p2.getZ() - p1.getZ();
+
+        double fx = p1.getX() - sphereCenter.getX();
+        double fy = p1.getY() - sphereCenter.getY();
+        double fz = p1.getZ() - sphereCenter.getZ();
+
+        double a = dx * dx + dy * dy + dz * dz;
+        double b = 2 * (fx * dx + fy * dy + fz * dz);
+        double c = (fx * fx + fy * fy + fz * fz) - radius * radius;
+
         double discriminant = b * b - 4 * a * c;
         if (discriminant < 0)
             return false;
+
+        if (a == 0.0)
+            return false;
+
         discriminant = Math.sqrt(discriminant);
         double t1 = (-b - discriminant) / (2 * a);
         double t2 = (-b + discriminant) / (2 * a);
-        return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
+        return (t1 >= 0.0 && t1 <= 1.0) || (t2 >= 0.0 && t2 <= 1.0);
     }
 
     // --- TRAIL LOGIC WITH ALL NEW TRAILS ---

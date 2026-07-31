@@ -42,8 +42,11 @@ public class Hologram {
         return location.clone();
     }
 
+    private Component cachedComponent = null;
+
     public synchronized void setLocation(Location newLoc) {
         if (newLoc == null || newLoc.getWorld() == null) return;
+        if (this.location != null && this.location.equals(newLoc)) return;
         this.location = newLoc.clone();
         TextDisplay display = getOrSpawnDisplay();
         if (display != null && display.isValid()) {
@@ -52,10 +55,13 @@ public class Hologram {
     }
 
     public synchronized void setLines(List<String> lines) {
-        this.lines = (lines != null) ? new ArrayList<>(lines) : new ArrayList<>();
+        List<String> newLines = (lines != null) ? new ArrayList<>(lines) : new ArrayList<>();
+        if (this.lines.equals(newLines) && cachedComponent != null) return;
+        this.lines = newLines;
+        this.cachedComponent = buildComponent(this.lines);
         TextDisplay display = getOrSpawnDisplay();
         if (display != null && display.isValid()) {
-            display.text(buildComponent(this.lines));
+            display.text(this.cachedComponent);
         }
     }
 
