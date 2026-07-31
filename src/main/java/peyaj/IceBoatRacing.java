@@ -27,6 +27,7 @@ import peyaj.integration.IceBoatPlaceholders;
 import peyaj.replay.ReplayManager;
 import peyaj.social.PartyManager;
 import peyaj.utils.AsyncIO;
+import org.bstats.bukkit.Metrics;
 
 import java.io.File;
 import java.io.IOException;
@@ -138,6 +139,11 @@ public class IceBoatRacing extends JavaPlugin {
         if (getCommand("racequit") != null) {
             Objects.requireNonNull(getCommand("racequit")).setExecutor(cmd);
         }
+
+        // Initialize bStats Metrics
+        int pluginId = 33031;
+        Metrics metrics = new Metrics(this, pluginId);
+        metrics.addCustomChart(new Metrics.SimplePie("total_arenas", () -> String.valueOf(arenas.size())));
 
         getServer().getPluginManager().registerEvents(new RaceListener(this), this);
 

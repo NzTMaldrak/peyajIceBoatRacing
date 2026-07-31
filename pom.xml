@@ -47,6 +47,10 @@
                                     <pattern>io.github.retrooper.packetevents</pattern>
                                     <shadedPattern>peyaj.lib.packetevents.impl</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>org.bstats</pattern>
+                                    <shadedPattern>peyaj.lib.bstats</shadedPattern>
+                                </relocation>
                             </relocations>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
@@ -99,6 +103,12 @@
             <artifactId>placeholderapi</artifactId>
             <version>2.11.7</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-bukkit</artifactId>
+            <version>3.0.2</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 </project>

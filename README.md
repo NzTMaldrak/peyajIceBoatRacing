@@ -1,17 +1,14 @@
 # IceBoatRacing v3.0
-
-![Version](https://img.shields.io/badge/Paper-1.21.x--26.2-blue?style=for-the-badge&logo=paper)
-![Version](https://img.shields.io/badge/Version-3.0-green?style=for-the-badge)
-![Maintenance](https://img.shields.io/badge/Author-peyaj-orange?style=for-the-badge)
-
 *A feature-rich, competitive Ice Boat Racing plugin for Paper **1.21.x - 26.2**.*
 
-![Preview](https://i.imgur.com/z8kkRxi.gif)
+Are you a filipino and want to host your Minecraft server in the Philippines? Visit https://mcziehost.fun
+
+![web banner](https://i.imgur.com/D5vYv0R.jpeg)
 
 ---
 
 ## Features Overview
-
+![Preview](https://i.imgur.com/z8kkRxi.gif)
 ### Core Racing
 - **Multi-Arena Support** - Run multiple races simultaneously
 - **Race Modes** - DEFAULT (Sprint), LAP (Looping), ELIMINATION (Last place eliminated each lap)
@@ -119,37 +116,7 @@ All features are configurable in `config.yml`:
 - Trail particle rates
 - Title unlock thresholds
 
----
-
-## Changelog
-
-### v3.0 (Major Update)
-- Upgraded to Paper 1.21.x - 26.2
-- Migrated to PacketEvents (bundled via shading)
-- Built-in standalone TextDisplay Hologram system
-- Added Elimination race mode
-- Added Party system (up to 8 players)
-- Added Race replays
-- Added 17 particle trails
-- Added traffic light countdown animation
-- Added victory fireworks
-- Added spectator camera modes
-- Added PlaceholderAPI integration
-- Added Discord webhook embeds
-- Added configurable titles/ranks
-- Added Anti-Cheat & Edge Case protections (Void bug fix, blocked damage/hunger, disabled inventory moving)
-- Added Anti-Griefing protections (Blocked block breaking/placing in arenas)
-- Added Anti-Cheating protections (Blocked `/tp`, `/spawn`, and Ender Pearls)
-- Reorganized code into modular packages
-
-### v2.0
-- Initial public release
-- Multi-arena support
-- Ghost time trials
-- Map voting system
-
----
 
 ## License
 
-MIT License - Feel free to modify and use!
+GNU GPL v3
