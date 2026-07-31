@@ -168,6 +168,10 @@ public class RaceCommand implements CommandExecutor {
     }
 
     private void handleParty(Player p, String[] args) {
+        if (!p.hasPermission("race.party") && !p.hasPermission("race.use")) {
+            p.sendMessage(plugin.getMessage("no-permission"));
+            return;
+        }
         if (args.length < 2) {
             p.sendMessage(Component.text("Usage: /race party <create|invite|accept|leave|kick|chat|list>",
                     NamedTextColor.RED));
@@ -233,6 +237,10 @@ public class RaceCommand implements CommandExecutor {
     }
 
     private void handleReplay(Player p, String[] args) {
+        if (!p.hasPermission("race.replay") && !p.hasPermission("race.use")) {
+            p.sendMessage(plugin.getMessage("no-permission"));
+            return;
+        }
         if (args.length < 2) {
             p.sendMessage(Component.text("Usage: /race replay <list|watch|stop> [arena] [index]", NamedTextColor.RED));
             return;

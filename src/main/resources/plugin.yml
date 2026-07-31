@@ -27,11 +27,42 @@ commands:
 
 permissions:
   race.admin:
-    description: Admin access to setup arenas and force start/stop
+    description: Admin access to setup, edit, start, stop, and reload races.
     default: op
   race.use:
-    description: Access to join and play races
+    description: Access to join and play races.
     default: true
+  race.party:
+    description: Access to create and join race parties.
+    default: true
+  race.replay:
+    description: Access to list and watch race replays.
+    default: true
+  race.spectate:
+    description: Access to spectate active races.
+    default: true
+  race.cosmetics:
+    description: Access to open and customize cosmetics.
+    default: true
+  race.trail.*:
+    description: Access to all cosmetics trails.
+    default: op
+    children:
+      race.trail.flame: true
+      race.trail.hearts: true
+      race.trail.notes: true
+      race.trail.sparks: true
+      race.trail.magic: true
+      race.trail.ender: true
+      race.trail.rainbow: true
+      race.trail.soulfire: true
+      race.trail.water: true
+      race.trail.snow: true
+      race.trail.cherry: true
+      race.trail.electric: true
+      race.trail.sculk: true
+      race.trail.honey: true
+      race.trail.lava: true
   race.trail.flame:
     description: Access to flame trail
     default: false
