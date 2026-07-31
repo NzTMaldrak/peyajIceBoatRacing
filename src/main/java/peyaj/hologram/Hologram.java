@@ -92,6 +92,7 @@ public class Hologram {
                 String taggedId = textDisplay.getPersistentDataContainer().get(key, PersistentDataType.STRING);
                 if (Objects.equals(taggedId, id)) {
                     textDisplayUuid = textDisplay.getUniqueId();
+                    textDisplay.setSeeThrough(true);
                     return textDisplay;
                 }
             }
@@ -103,8 +104,8 @@ public class Hologram {
             display.getPersistentDataContainer().set(key, PersistentDataType.STRING, id);
             display.setBillboard(Display.Billboard.CENTER);
             display.setShadowed(true);
-            display.setBackgroundColor(Color.fromARGB(80, 0, 0, 0)); // Sleek semi-transparent dark background
-            display.setSeeThrough(false);
+            display.setBackgroundColor(Color.fromARGB(100, 0, 0, 0)); // Sleek semi-transparent dark background
+            display.setSeeThrough(true); // Ensures clear rendering through translucent blocks (ice, water, glass)
             display.text(buildComponent(lines));
             this.textDisplayUuid = display.getUniqueId();
             return display;

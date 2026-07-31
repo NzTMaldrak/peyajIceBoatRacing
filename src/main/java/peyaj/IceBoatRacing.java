@@ -390,7 +390,11 @@ public class IceBoatRacing extends JavaPlugin {
     }
 
     public void removeArena(String name) {
-        arenas.remove(name.toLowerCase());
+        RaceArena arena = arenas.remove(name.toLowerCase());
+        if (arena != null) {
+            arena.stopRace();
+            arena.deleteLeaderboardHologram();
+        }
     }
 
     public RaceArena getPlayerArena(UUID uuid) {

@@ -1,5 +1,6 @@
 package peyaj;
 
+import io.papermc.paper.scoreboard.numbers.NumberFormat;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -1292,36 +1293,43 @@ public class RaceArena {
     private void setupLobbyScoreboard(Player p) {
         ScoreboardManager m = Bukkit.getScoreboardManager();
         Scoreboard b = m.getNewScoreboard();
-        Objective o = b.registerNewObjective("Lobby", Criteria.DUMMY, Component.text("§b§lICE BOAT"));
+        Objective o = b.registerNewObjective("Lobby", Criteria.DUMMY, Component.text("§b§lICE BOAT RACING"));
         o.setDisplaySlot(DisplaySlot.SIDEBAR);
+        try {
+            o.numberFormat(NumberFormat.blank());
+        } catch (Throwable ignored) {
+        }
         Team statusTeam = b.registerNewTeam("status");
         String statusTxt = (autoStartTask != null && lobbyCountdown >= 0) ? "§eStart: " + lobbyCountdown + "s"
                 : "§fWaiting...";
         statusTeam.addEntry("§7");
         statusTeam.suffix(Component.text(statusTxt));
-        o.getScore("§7----------------").setScore(6);
-        o.getScore("§eArena:").setScore(5);
-        o.getScore("  §f" + name).setScore(4);
-        o.getScore(" ").setScore(3);
-        o.getScore("§aPlayers: §f" + players.size() + "/" + minPlayers).setScore(2);
-        o.getScore("§7").setScore(1);
-        o.getScore("§7---------------- ").setScore(0);
+        o.getScore("§7--------------------").setScore(6);
+        o.getScore("§eArena: §f" + name).setScore(5);
+        o.getScore("§ePlayers: §f" + players.size() + "/" + minPlayers).setScore(4);
+        o.getScore("§eStatus: ").setScore(3);
+        o.getScore("§7").setScore(2);
+        o.getScore("§7-------------------- ").setScore(1);
         p.setScoreboard(b);
     }
 
     private void setupRaceScoreboard(Player p) {
         ScoreboardManager m = Bukkit.getScoreboardManager();
         Scoreboard b = m.getNewScoreboard();
-        Objective o = b.registerNewObjective("IceRace", Criteria.DUMMY, Component.text("§b§lICE BOAT"));
+        Objective o = b.registerNewObjective("IceRace", Criteria.DUMMY, Component.text("§b§lICE BOAT RACING"));
         o.setDisplaySlot(DisplaySlot.SIDEBAR);
+        try {
+            o.numberFormat(NumberFormat.blank());
+        } catch (Throwable ignored) {
+        }
         Team ghost = b.registerNewTeam("ghost");
         ghost.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
         Utils.createTeam(b, "stats", "§fTime: 00:00");
-        o.getScore("§7----------------").setScore(15);
+        o.getScore("§7--------------------").setScore(15);
         o.getScore("§eStats:").setScore(14);
         o.getScore("§f").setScore(13);
         o.getScore(" ").setScore(12);
-        o.getScore("§e§lTOP RACERS").setScore(11);
+        o.getScore("§e§lSTANDINGS").setScore(11);
         String[] rankKeys = { "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a" };
         for (int i = 0; i < 10; i++) {
             Utils.createTeam(b, "rank_" + (i + 1), "");
@@ -1408,5 +1416,20 @@ public class RaceArena {
         if (!pTimes.containsKey(globalIndex) || !lTimes.containsKey(globalIndex))
             return 0;
         return pTimes.get(globalIndex) - lTimes.get(globalIndex);
+    }
+
+    public boolean isSetupComplete() {
+        return !spawns.isEmpty() && !checkpoints.isEmpty() && finishBox != null && lobby != null;
+    }
+
+    public List<String> getSetupStatus() {
+        List<String> status = new ArrayList<>();
+        status.add(spawns.isEmpty() ? "&c✘ Spawns: None set" : "&a✔ Spawns: &f" + spawns.size() + " set");
+        status.add(checkpoints.isEmpty() ? "&c✘ Checkpoints: None set" : "&a✔ Checkpoints: &f" + checkpoints.size() + " set");
+        status.add(finishBox == null ? "&c✘ Finish Line: Not set" : "&a✔ Finish Line: &fConfigured");
+        status.add(lobby == null ? "&c✘ Pre-Race Lobby: Not set" : "&a✔ Pre-Race Lobby: &fConfigured");
+        status.add(mainLobby == null ? "&e! Main Lobby: &fWorld spawn (default)" : "&a✔ Main Lobby: &fConfigured");
+        status.add(leaderboardLocation == null ? "&e! Leaderboard: &fNot set" : "&a✔ Leaderboard: &fConfigured");
+        return status;
     }
 }

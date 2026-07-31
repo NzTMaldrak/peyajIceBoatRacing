@@ -257,6 +257,11 @@ public class GUIManager implements Listener {
         inv.setItem(12, createItem(Material.BLAZE_POWDER, "&6&lWand Mode",
                 "&7Current: " + currentMode.color + currentMode.displayName, "&eClick to cycle mode"));
 
+        boolean ready = arena.isSetupComplete();
+        inv.setItem(13, createItem(ready ? Material.EMERALD : Material.REDSTONE_BLOCK,
+                ready ? "&a&lSetup Progress: READY" : "&c&lSetup Progress: INCOMPLETE",
+                "&7Click to open setup checklist"));
+
         inv.setItem(14, createItem(Material.CLOCK, "&e&lLaps: &f" + arena.getTotalLaps(), "&aLeft-Click: +1",
                 "&cRight-Click: -1"));
         inv.setItem(16, createItem(Material.PLAYER_HEAD, "&e&lMin Players: &f" + arena.minPlayers, "&aLeft-Click: +1",
@@ -277,6 +282,27 @@ public class GUIManager implements Listener {
         fillGlass(inv);
         p.openInventory(inv);
         plugin.editorArena.put(p.getUniqueId(), arena.getName());
+    }
+
+    public void openArenaSetupStatusMenu(Player p, RaceArena arena) {
+        Inventory inv = Bukkit.createInventory(null, 36,
+                Component.text("Setup Progress: " + arena.getName(), NamedTextColor.DARK_AQUA));
+
+        List<String> statusLines = arena.getSetupStatus();
+        Material icon = arena.isSetupComplete() ? Material.EMERALD_BLOCK : Material.REDSTONE_BLOCK;
+        String statusTitle = arena.isSetupComplete() ? "&a&lARENA READY FOR RACING" : "&c&lARENA INCOMPLETE";
+
+        inv.setItem(13, createItem(icon, statusTitle, statusLines.toArray(new String[0])));
+
+        // Direct Quick Actions
+        inv.setItem(19, createItem(Material.OAK_DOOR, "&aSet Pre-Race Lobby", "&7Click to set lobby at your feet"));
+        inv.setItem(21, createItem(Material.LIGHT_WEIGHTED_PRESSURE_PLATE, "&aSet Finish Line", "&7Equip wand to set finish box"));
+        inv.setItem(23, createItem(Material.TARGET, "&aSet Checkpoints", "&7Equip wand to set checkpoints"));
+        inv.setItem(25, createItem(Material.ARMOR_STAND, "&dSet Leaderboard", "&7Sets hologram at your feet"));
+
+        inv.setItem(31, createItem(Material.ARROW, "&cBack to Editor", ""));
+        fillGlass(inv);
+        p.openInventory(inv);
     }
 
     // --- HELPER: GIVE BOOK ---
@@ -330,7 +356,7 @@ public class GUIManager implements Listener {
         if (!title.contains("IceBoat") && !title.contains("Select Arena") && !title.contains("Edit Arena")
                 && !title.contains("Editing:") && !title.contains("Select Cage") && !title.contains("Select Type")
                 && !title.contains("Cosmetics Hub") && !title.contains("Select Particle")
-                && !title.contains("Vote for Map"))
+                && !title.contains("Vote for Map") && !title.contains("Setup Progress:"))
             return;
 
         e.setCancelled(true);
@@ -539,7 +565,9 @@ public class GUIManager implements Listener {
                 return;
             }
 
-            if (clicked.getType() == Material.ENDER_EYE || clicked.getType() == Material.ENDER_PEARL) {
+            if (clicked.getType() == Material.EMERALD || clicked.getType() == Material.REDSTONE_BLOCK) {
+                openArenaSetupStatusMenu(p, arena);
+            } else if (clicked.getType() == Material.ENDER_EYE || clicked.getType() == Material.ENDER_PEARL) {
                 p.performCommand("race admin visualize " + arenaName);
                 openArenaEditor(p, arena);
             } else if (clicked.getType() == Material.BLAZE_POWDER) {
@@ -588,6 +616,47 @@ public class GUIManager implements Listener {
                 }
             } else if (clicked.getType() == Material.ARROW) {
                 openArenaSelector(p, true);
+            }
+            return;
+        }
+
+        // Setup Progress Checklist Menu
+        if (title.contains("Setup Progress:")) {
+            String arenaName = plugin.editorArena.get(p.getUniqueId());
+            if (arenaName == null) {
+                p.closeInventory();
+                return;
+            }
+            RaceArena arena = plugin.getArena(arenaName);
+            if (arena == null) {
+                p.closeInventory();
+                return;
+            }
+
+            if (clicked.getType() == Material.OAK_DOOR) {
+                arena.setLobby(p.getLocation());
+                plugin.saveArenas();
+                p.sendMessage(Component.text("Pre-Race Lobby set at your location!", NamedTextColor.GREEN));
+                p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
+                openArenaSetupStatusMenu(p, arena);
+            } else if (clicked.getType() == Material.ARMOR_STAND) {
+                arena.setLeaderboardLocation(p.getLocation().add(0, 1.5, 0));
+                plugin.saveArenas();
+                p.sendMessage(Component.text("Leaderboard hologram position set!", NamedTextColor.LIGHT_PURPLE));
+                p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
+                openArenaSetupStatusMenu(p, arena);
+            } else if (clicked.getType() == Material.LIGHT_WEIGHTED_PRESSURE_PLATE) {
+                plugin.editorMode.put(p.getUniqueId(), EditMode.FINISH);
+                p.performCommand("race admin wand");
+                p.sendMessage(Component.text("Wand mode set to FINISH. Left-Click & Right-Click blocks with wand.", NamedTextColor.YELLOW));
+                p.closeInventory();
+            } else if (clicked.getType() == Material.TARGET) {
+                plugin.editorMode.put(p.getUniqueId(), EditMode.CHECKPOINT);
+                p.performCommand("race admin wand");
+                p.sendMessage(Component.text("Wand mode set to CHECKPOINT. Left-Click blocks with wand.", NamedTextColor.YELLOW));
+                p.closeInventory();
+            } else if (clicked.getType() == Material.ARROW) {
+                openArenaEditor(p, arena);
             }
         }
     }
