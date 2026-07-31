@@ -646,7 +646,7 @@ public class GUIManager implements Listener {
                 p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
                 openArenaSetupStatusMenu(p, arena);
             } else if (clicked.getType() == Material.LIGHT_WEIGHTED_PRESSURE_PLATE) {
-                plugin.editorMode.put(p.getUniqueId(), EditMode.FINISH);
+                plugin.editorMode.put(p.getUniqueId(), EditMode.FINISH_1);
                 p.performCommand("race admin wand");
                 p.sendMessage(Component.text("Wand mode set to FINISH. Left-Click & Right-Click blocks with wand.", NamedTextColor.YELLOW));
                 p.closeInventory();
