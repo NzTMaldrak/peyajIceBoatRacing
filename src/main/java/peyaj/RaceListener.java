@@ -178,7 +178,7 @@ public class RaceListener implements Listener {
 
         // Ensure step height is set for Paper native smooth stepping
         try {
-            boat.setStepHeight(1.25f);
+            boat.getClass().getMethod("setStepHeight", float.class).invoke(boat, 1.25f);
         } catch (Throwable ignored) {
         }
 
