@@ -1,4 +1,4 @@
-# IceBoatRacing v3.0
+# IceBoatRacing v3.1
 *A feature-rich, competitive Ice Boat Racing plugin for Paper **1.21.x - 26.2**.*
 
 Are you a filipino and want to host your Minecraft server in the Philippines? Visit https://mcziehost.fun
@@ -15,7 +15,7 @@ Are you a filipino and want to host your Minecraft server in the Philippines? Vi
 - **Ray-Traced Physics** - Detects checkpoints at **100km/h+** without skipping
 - **Visual Editor** - Wand tool with real-time particle visualization
 
-### v3.0 New Features
+### v3.1 New Features
 
 | Feature | Description |
 |---------|-------------|
@@ -40,7 +40,7 @@ Are you a filipino and want to host your Minecraft server in the Philippines? Vi
    - Standalone (Built-in PacketEvents & TextDisplay Hologram Engine - No ProtocolLib or DecentHolograms required!)
    - *(Optional)* [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/)
 
-2. Download `IceBoatRacing-3.0.jar` and place in `/plugins`
+2. Download `IceBoatRacing-3.1.jar` and place in `/plugins`
 3. **Restart** the server (do not use `/reload`)
 4. Configure `config.yml` as needed
 
