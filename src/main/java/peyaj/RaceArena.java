@@ -277,6 +277,7 @@ public class RaceArena {
         }
 
         players.add(p.getUniqueId());
+        plugin.setPlayerArena(p.getUniqueId(), name);
         if (lobby != null && lobby.getWorld() != null) {
             p.teleport(lobby);
             p.playSound(p.getLocation(), Sound.ENTITY_ITEM_PICKUP, 1f, 1f);
@@ -424,6 +425,11 @@ public class RaceArena {
         p.getInventory().clear();
         stopMusic(p);
         p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        if (mainLobby != null && mainLobby.getWorld() != null)
+            p.teleport(mainLobby);
+        else if (p.getWorld() != null)
+            p.teleport(p.getWorld().getSpawnLocation());
+        plugin.removePlayerFromArenaMap(p.getUniqueId());
 
         if (players.isEmpty()) {
             if (state != RaceState.LOBBY)
