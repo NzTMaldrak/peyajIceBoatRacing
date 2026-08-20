@@ -16,13 +16,12 @@ import java.util.concurrent.ThreadLocalRandom;
 public class PacketUtils {
 
     // Spawn a fake boat for a specific player via PacketEvents
-    public static int spawnFakeBoat(Player observer, Location loc) {
+    public static int spawnFakeBoat(Player observer, Location loc, UUID uuid) {
         if (observer == null || !observer.isOnline() || loc == null) {
             return -1;
         }
 
         int entityId = ThreadLocalRandom.current().nextInt(100000, 999999);
-        UUID uuid = UUID.randomUUID();
 
         Vector3d position = new Vector3d(loc.getX(), loc.getY(), loc.getZ());
         WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(

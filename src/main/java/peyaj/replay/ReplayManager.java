@@ -278,7 +278,7 @@ public class ReplayManager {
             ReplayData.ReplayFrame firstFrame = replay.getFrames().get(0);
             for (Map.Entry<String, ReplayData.PlayerFrameData> entry : firstFrame.getPlayerData().entrySet()) {
                 Location loc = entry.getValue().toLocation(world);
-                int entityId = PacketUtils.spawnFakeBoat(viewer, loc);
+                int entityId = PacketUtils.spawnFakeBoat(viewer, loc, UUID.randomUUID());
                 fakeEntityIds.put(entry.getKey(), entityId);
             }
 

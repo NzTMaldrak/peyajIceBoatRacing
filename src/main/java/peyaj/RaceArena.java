@@ -700,8 +700,13 @@ public class RaceArena {
                         Player p = Bukkit.getPlayer(uuid);
                         if (p != null) {
                             if (!ghostEntityIds.containsKey(uuid)) {
-                                int id = PacketUtils.spawnFakeBoat(p, ghostLoc);
+                                UUID fakeUuid = UUID.randomUUID();
+                                int id = PacketUtils.spawnFakeBoat(p, ghostLoc, fakeUuid);
                                 ghostEntityIds.put(uuid, id);
+                                org.bukkit.scoreboard.Team t = p.getScoreboard().getTeam("ghost");
+                                if (t != null) {
+                                    t.addEntry(fakeUuid.toString());
+                                }
                             } else {
                                 PacketUtils.moveFakeBoat(p, ghostEntityIds.get(uuid), ghostLoc);
                             }
