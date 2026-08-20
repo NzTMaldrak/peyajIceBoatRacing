@@ -218,24 +218,28 @@ public class GUIManager implements Listener {
         for (RaceArena arena : plugin.getArenas().values()) {
             String status = (arena.getState() == RaceState.LOBBY) ? "&aOPEN" : "&cRUNNING";
 
-            String loreAction;
+            List<String> lore = new ArrayList<>();
+            lore.add("&7Status: " + status);
+            lore.add("&7Type: &f" + arena.getType());
+            lore.add("&7Laps: &f" + arena.getTotalLaps());
+
             if (adminMode) {
-                loreAction = "&eClick to Edit";
+                lore.add("&eClick to Edit");
             } else {
                 if (arena.getState() == RaceState.LOBBY) {
                     // Check if lobby has players
                     if (arena.getPlayerCount() > 0) {
-                        loreAction = "&eLeft-Click to Join Match &7(" + arena.getPlayerCount() + " waiting)";
+                        lore.add("&eLeft-Click to Join Match &7(" + arena.getPlayerCount() + " waiting)");
                     } else {
-                        loreAction = "&eLeft-Click to Join\n&dShift-Click for Time Trial";
+                        lore.add("&eLeft-Click to Join");
+                        lore.add("&dShift-Click for Time Trial");
                     }
                 } else {
-                    loreAction = "&bClick to Spectate";
+                    lore.add("&bClick to Spectate");
                 }
             }
 
-            ItemStack item = createItem(Material.ICE, "&b&l" + arena.getName(), "&7Status: " + status,
-                    "&7Type: &f" + arena.getType(), "&7Laps: &f" + arena.getTotalLaps(), loreAction);
+            ItemStack item = createItem(Material.ICE, "&b&l" + arena.getName(), lore.toArray(new String[0]));
             ItemMeta meta = item.getItemMeta();
             meta.getPersistentDataContainer().set(arenaKey, PersistentDataType.STRING, arena.getName());
             item.setItemMeta(meta);
