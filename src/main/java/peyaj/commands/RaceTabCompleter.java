@@ -37,7 +37,7 @@ public class RaceTabCompleter implements TabCompleter {
         if (args.length == 1) {
             // First argument - main subcommands
             List<String> subcommands = new ArrayList<>(
-                    Arrays.asList("join", "leave", "vote", "cp", "checkpoint", "party", "replay"));
+                    Arrays.asList("join", "leave", "vote", "cp", "checkpoint", "replay"));
             if (sender.hasPermission("race.admin")) {
                 subcommands.addAll(Arrays.asList("start", "stop", "admin"));
             }
@@ -56,10 +56,6 @@ public class RaceTabCompleter implements TabCompleter {
                         return filterCompletions(Arrays.asList(
                                 "wand", "startvote", "delete", "visualize", "reload", "setmainlobby"), args[1]);
                     }
-                }
-                case "party" -> {
-                    return filterCompletions(Arrays.asList(
-                            "create", "invite", "accept", "leave", "kick", "chat", "list"), args[1]);
                 }
                 case "replay" -> {
                     return filterCompletions(Arrays.asList("list", "watch", "stop"), args[1]);

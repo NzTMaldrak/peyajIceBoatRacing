@@ -25,7 +25,7 @@ import peyaj.hologram.HologramManager;
 import peyaj.integration.DiscordWebhook;
 import peyaj.integration.IceBoatPlaceholders;
 import peyaj.replay.ReplayManager;
-import peyaj.social.PartyManager;
+
 import peyaj.utils.AsyncIO;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
@@ -66,7 +66,6 @@ public class IceBoatRacing extends JavaPlugin {
 
     // --- MANAGERS ---
     public GUIManager guiManager;
-    public PartyManager partyManager;
     public ReplayManager replayManager;
     public DiscordWebhook discordWebhook;
     public HologramManager hologramManager;
@@ -116,7 +115,6 @@ public class IceBoatRacing extends JavaPlugin {
 
         // Initialize managers
         guiManager = new GUIManager(this);
-        partyManager = new PartyManager(this);
         replayManager = new ReplayManager(this);
         discordWebhook = new DiscordWebhook(this);
 

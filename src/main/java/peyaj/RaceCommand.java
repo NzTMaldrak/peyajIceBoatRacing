@@ -67,7 +67,6 @@ public class RaceCommand implements CommandExecutor {
             case "join" -> handleJoin(p, args);
             case "leave" -> handleLeave(p);
             case "admin" -> handleAdmin(p, args);
-            case "party" -> handleParty(p, args);
             case "replay" -> handleReplay(p, args);
             default -> p.sendMessage(plugin.getMessage("race-usage"));
         }
@@ -134,6 +133,11 @@ public class RaceCommand implements CommandExecutor {
             p.sendMessage(Component.text("Usage: /race join <arena>", NamedTextColor.RED));
             return;
         }
+        if (plugin.isRacer(p.getUniqueId())) {
+            p.sendMessage(Component.text("You are already in a race!", NamedTextColor.RED));
+            return;
+        }
+        
         String arenaName = args[1];
         RaceArena arena = plugin.getArena(arenaName);
         if (arena == null) {
@@ -141,20 +145,6 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         arena.addPlayer(p);
-
-        // Party join - invite party members too
-        if (plugin.partyManager.isInParty(p.getUniqueId())) {
-            for (java.util.UUID memberUuid : plugin.partyManager.getPartyMembers(p.getUniqueId())) {
-                if (!memberUuid.equals(p.getUniqueId())) {
-                    Player member = Bukkit.getPlayer(memberUuid);
-                    if (member != null && member.isOnline() && !plugin.isRacer(memberUuid)) {
-                        member.sendMessage(Component.text("Your party leader joined " + arenaName + "! Teleporting...",
-                                NamedTextColor.AQUA));
-                        arena.addPlayer(member);
-                    }
-                }
-            }
-        }
     }
 
     private void handleLeave(Player p) {
@@ -167,74 +157,7 @@ public class RaceCommand implements CommandExecutor {
         p.sendMessage(plugin.getMessage("arena-left"));
     }
 
-    private void handleParty(Player p, String[] args) {
-        if (!p.hasPermission("race.party") && !p.hasPermission("race.use")) {
-            p.sendMessage(plugin.getMessage("no-permission"));
-            return;
-        }
-        if (args.length < 2) {
-            p.sendMessage(Component.text("Usage: /race party <create|invite|accept|leave|kick|chat|list>",
-                    NamedTextColor.RED));
-            return;
-        }
-        String action = args[1].toLowerCase();
-        switch (action) {
-            case "create" -> plugin.partyManager.createParty(p);
-            case "invite" -> {
-                if (args.length < 3) {
-                    p.sendMessage(Component.text("Usage: /race party invite <player>", NamedTextColor.RED));
-                    return;
-                }
-                Player target = Bukkit.getPlayer(args[2]);
-                if (target == null) {
-                    p.sendMessage(Component.text("Player not found.", NamedTextColor.RED));
-                    return;
-                }
-                plugin.partyManager.invitePlayer(p, target);
-            }
-            case "accept" -> plugin.partyManager.acceptInvite(p);
-            case "leave" -> plugin.partyManager.leaveParty(p);
-            case "kick" -> {
-                if (args.length < 3) {
-                    p.sendMessage(Component.text("Usage: /race party kick <player>", NamedTextColor.RED));
-                    return;
-                }
-                Player target = Bukkit.getPlayer(args[2]);
-                if (target == null) {
-                    p.sendMessage(Component.text("Player not found.", NamedTextColor.RED));
-                    return;
-                }
-                plugin.partyManager.kickPlayer(p, target);
-            }
-            case "chat" -> {
-                if (args.length < 3) {
-                    p.sendMessage(Component.text("Usage: /race party chat <message>", NamedTextColor.RED));
-                    return;
-                }
-                StringBuilder message = new StringBuilder();
-                for (int i = 2; i < args.length; i++) {
-                    message.append(args[i]).append(" ");
-                }
-                plugin.partyManager.sendPartyChat(p, message.toString().trim());
-            }
-            case "list" -> {
-                peyaj.social.Party party = plugin.partyManager.getParty(p.getUniqueId());
-                if (party == null) {
-                    p.sendMessage(Component.text("You are not in a party.", NamedTextColor.RED));
-                    return;
-                }
-                p.sendMessage(Component.text("--- Party Members (" + party.getSize() + "/8) ---", NamedTextColor.GOLD));
-                for (java.util.UUID uuid : party.getMembers()) {
-                    Player member = Bukkit.getPlayer(uuid);
-                    String name = member != null ? member.getName() : Bukkit.getOfflinePlayer(uuid).getName();
-                    String role = party.isLeader(uuid) ? "§e★ Leader" : "§7Member";
-                    p.sendMessage(Component.text("  " + name + " " + role));
-                }
-            }
-            default -> p.sendMessage(Component
-                    .text("Unknown action. Use create, invite, accept, leave, kick, chat, list.", NamedTextColor.RED));
-        }
-    }
+
 
     private void handleReplay(Player p, String[] args) {
         if (!p.hasPermission("race.replay") && !p.hasPermission("race.use")) {

@@ -19,7 +19,6 @@ Are you a filipino and want to host your Minecraft server in the Philippines? Vi
 
 | Feature | Description |
 |---------|-------------|
-| **Party System** | Create parties, invite friends, race together (max 8) |
 | **Race Replays** | Hypixel-style replay playback of completed races |
 | **Enhanced Ghosts** | Race against server best times with fake packet boats |
 | **Traffic Light Start** | Colored particle countdown (Red -> Yellow -> Green) |
