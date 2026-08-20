@@ -134,7 +134,7 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         if (plugin.isRacer(p.getUniqueId())) {
-            p.sendMessage(Component.text("You are already in a race!", NamedTextColor.RED));
+            p.sendMessage(Component.text("You are already in an arena! Use /race leave first.", NamedTextColor.RED));
             return;
         }
         
