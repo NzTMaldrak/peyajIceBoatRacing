@@ -988,6 +988,21 @@ public class RaceArena {
         p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1f);
         p.playSound(p.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_LARGE_BLAST, 1f, 1f);
 
+        // Command Rewards
+        int rank = finishOrder.size();
+        if (plugin.rewardsEnabled && players.size() >= plugin.rewardsMinPlayers) {
+            if (plugin.rewardCommands.containsKey(rank)) {
+                List<String> commands = plugin.rewardCommands.get(rank);
+                for (String cmd : commands) {
+                    if (cmd == null || cmd.trim().isEmpty()) continue;
+                    String finalCmd = cmd.replace("%player%", p.getName());
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), finalCmd);
+                    });
+                }
+            }
+        }
+
         // VICTORY CELEBRATION: Spawn fireworks for winner
         if (isWinner) {
             spawnVictoryFireworks(p.getLocation());

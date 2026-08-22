@@ -80,6 +80,10 @@ public class IceBoatRacing extends JavaPlugin {
     public float musicVolume = 10000.0f;
     public float musicPitch = 1.0f;
 
+    public boolean rewardsEnabled = false;
+    public int rewardsMinPlayers = 2;
+    public final Map<Integer, List<String>> rewardCommands = new HashMap<>();
+
     @Override
     public void onLoad() {
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
@@ -95,6 +99,7 @@ public class IceBoatRacing extends JavaPlugin {
         sendStartupBanner();
 
         saveDefaultConfig();
+        checkConfigUpdates();
         loadConfigSettings();
         loadMessages();
         loadStats();
@@ -299,6 +304,18 @@ public class IceBoatRacing extends JavaPlugin {
         return count;
     }
 
+    private void checkConfigUpdates() {
+        if (!getConfig().contains("victory.rewards")) {
+            getConfig().set("victory.rewards.enabled", false);
+            getConfig().set("victory.rewards.min-players", 2);
+            getConfig().set("victory.rewards.1", Arrays.asList("eco give %player% 500"));
+            getConfig().set("victory.rewards.2", Arrays.asList("eco give %player% 250"));
+            getConfig().set("victory.rewards.3", Arrays.asList("eco give %player% 100"));
+            saveConfig();
+            getLogger().info("Updated config.yml with new victory.rewards section.");
+        }
+    }
+
     // --- CONFIG HELPERS ---
     private void loadArenasConfig() {
         arenasFile = new File(getDataFolder(), "arenas.yml");
@@ -466,6 +483,28 @@ public class IceBoatRacing extends JavaPlugin {
         this.musicDuration = getConfig().getInt("music.loop-duration-seconds", 180);
         this.musicVolume = (float) getConfig().getDouble("music.volume", 10000.0);
         this.musicPitch = (float) getConfig().getDouble("music.pitch", 1.0);
+
+        this.rewardsEnabled = getConfig().getBoolean("victory.rewards.enabled", false);
+        this.rewardsMinPlayers = getConfig().getInt("victory.rewards.min-players", 2);
+        this.rewardCommands.clear();
+        
+        if (this.rewardsEnabled) {
+            org.bukkit.configuration.ConfigurationSection rewardsSection = getConfig().getConfigurationSection("victory.rewards");
+            if (rewardsSection != null) {
+                for (String key : rewardsSection.getKeys(false)) {
+                    if (key.equals("enabled") || key.equals("min-players")) continue;
+                    try {
+                        int rank = Integer.parseInt(key);
+                        List<String> commands = rewardsSection.getStringList(key);
+                        if (commands != null && !commands.isEmpty()) {
+                            this.rewardCommands.put(rank, commands);
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // Ignore non-integer keys
+                    }
+                }
+            }
+        }
     }
 
     private void loadArenas() {

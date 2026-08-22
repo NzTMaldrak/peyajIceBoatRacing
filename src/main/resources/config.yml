@@ -1,5 +1,5 @@
 # ================================
-# IceBoatRacing v3.0 Configuration
+# IceBoatRacing Configuration
 # ================================
 
 # ======== CORE SETTINGS ========
@@ -53,6 +53,20 @@ victory:
   firework-delay: 10
   # Play victory sounds
   sounds-enabled: true
+  # Execute commands when a player finishes in the top 3 (Use %player% for the name)
+  rewards:
+    enabled: false
+    # Minimum players required in the race to give rewards (prevents farming in solo time trials)
+    min-players: 2
+    # 1st Place Commands
+    1:
+      - "eco give %player% 500"
+    # 2nd Place Commands
+    2:
+      - "eco give %player% 250"
+    # 3rd Place Commands
+    3:
+      - "eco give %player% 100"
 
 # ======== TRAILS SETTINGS ========
 trails:
