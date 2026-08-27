@@ -3,6 +3,7 @@ package peyaj;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -15,15 +16,19 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.scoreboard.Scoreboard;
 import com.github.retrooper.packetevents.PacketEvents;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import peyaj.commands.RaceTabCompleter;
 import peyaj.cosmetics.EditMode;
 import peyaj.cosmetics.TrailType;
 import peyaj.data.GhostData;
+import peyaj.data.PlayerSessionData;
 import peyaj.hologram.HologramManager;
 import peyaj.integration.DiscordWebhook;
 import peyaj.integration.IceBoatPlaceholders;
+import peyaj.integration.AntiCheatHook;
+import peyaj.integration.RaceClientHook;
 import peyaj.replay.ReplayManager;
 
 import peyaj.utils.AsyncIO;
@@ -32,6 +37,8 @@ import org.bstats.charts.SimplePie;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,6 +46,7 @@ public class IceBoatRacing extends JavaPlugin {
 
     private final Map<String, RaceArena> arenas = new HashMap<>();
     private final Map<UUID, String> playerArenaMap = new ConcurrentHashMap<>();
+    private final Map<UUID, PlayerSessionData> playerSessions = new HashMap<>();
 
     // --- EDITOR & INPUT DATA ---
     public final Map<UUID, String> editorArena = new HashMap<>();
@@ -69,6 +77,8 @@ public class IceBoatRacing extends JavaPlugin {
     public ReplayManager replayManager;
     public DiscordWebhook discordWebhook;
     public HologramManager hologramManager;
+    public AntiCheatHook antiCheatHook;
+    public RaceClientHook raceClientHook;
 
     // --- SETTINGS ---
     public double checkpointRadius = 25.0;
@@ -122,8 +132,11 @@ public class IceBoatRacing extends JavaPlugin {
         guiManager = new GUIManager(this);
         replayManager = new ReplayManager(this);
         discordWebhook = new DiscordWebhook(this);
+        antiCheatHook = new AntiCheatHook(this);
+        raceClientHook = new RaceClientHook(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
+        getServer().getPluginManager().registerEvents(raceClientHook, this);
 
         // Register commands with tab completer
         RaceCommand cmd = new RaceCommand(this);
@@ -180,6 +193,12 @@ public class IceBoatRacing extends JavaPlugin {
         for (RaceArena arena : arenas.values()) {
             arena.stopRace();
         }
+        if (antiCheatHook != null) {
+            antiCheatHook.clearAll();
+        }
+        if (raceClientHook != null) {
+            raceClientHook.close();
+        }
         if (hologramManager != null) {
             hologramManager.removeAll();
         }
@@ -213,8 +232,8 @@ public class IceBoatRacing extends JavaPlugin {
         playerVotes.clear();
 
         Bukkit.broadcast(Component.text("---------------------------------------", NamedTextColor.GREEN));
-        Bukkit.broadcast(Component.text(" 🗳️ Map Voting has started!", NamedTextColor.YELLOW));
-        Bukkit.broadcast(Component.text(" Type /race vote to choose the next map!", NamedTextColor.AQUA));
+        Bukkit.broadcast(Component.text(" 🗳️ La votazione della mappa è iniziata!", NamedTextColor.YELLOW));
+        Bukkit.broadcast(Component.text(" Usa /race vote per scegliere la prossima mappa!", NamedTextColor.AQUA));
         Bukkit.broadcast(Component.text("---------------------------------------", NamedTextColor.GREEN));
 
         for (Player p : Bukkit.getOnlinePlayers()) {
@@ -232,7 +251,7 @@ public class IceBoatRacing extends JavaPlugin {
 
                 if (votingTimeRemaining == 30 || votingTimeRemaining == 10 || votingTimeRemaining <= 5) {
                     Bukkit.broadcast(
-                            Component.text("Voting ends in " + votingTimeRemaining + "s...", NamedTextColor.GRAY));
+                            Component.text("La votazione termina tra " + votingTimeRemaining + "s...", NamedTextColor.GRAY));
                 }
 
                 votingTimeRemaining--;
@@ -267,14 +286,14 @@ public class IceBoatRacing extends JavaPlugin {
         }
 
         if (winner == null || !arenas.containsKey(winner)) {
-            Bukkit.broadcast(Component.text("Voting ended. No arenas available.", NamedTextColor.RED));
+            Bukkit.broadcast(Component.text("Votazione terminata. Nessuna arena disponibile.", NamedTextColor.RED));
             return;
         }
 
         RaceArena winningArena = arenas.get(winner);
         Bukkit.broadcast(Component.text("---------------------------------------", NamedTextColor.GREEN));
-        Bukkit.broadcast(Component.text(" 🏆 Voting Finished!", NamedTextColor.GOLD));
-        Bukkit.broadcast(Component.text(" Next Map: " + winningArena.getName(), NamedTextColor.AQUA));
+        Bukkit.broadcast(Component.text(" 🏆 Votazione terminata!", NamedTextColor.GOLD));
+        Bukkit.broadcast(Component.text(" Prossima mappa: " + winningArena.getName(), NamedTextColor.AQUA));
         Bukkit.broadcast(Component.text("---------------------------------------", NamedTextColor.GREEN));
 
         for (UUID uuid : playerVotes.keySet()) {
@@ -287,11 +306,11 @@ public class IceBoatRacing extends JavaPlugin {
 
     public void castVote(Player p, String arenaName) {
         if (!isVoting) {
-            p.sendMessage(Component.text("No voting in progress.", NamedTextColor.RED));
+            p.sendMessage(Component.text("Non c'è alcuna votazione in corso.", NamedTextColor.RED));
             return;
         }
         playerVotes.put(p.getUniqueId(), arenaName);
-        p.sendMessage(Component.text("You voted for " + arenaName, NamedTextColor.GREEN));
+        p.sendMessage(Component.text("Hai votato per " + arenaName, NamedTextColor.GREEN));
         p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
     }
 
@@ -340,6 +359,25 @@ public class IceBoatRacing extends JavaPlugin {
         if (!messagesFile.exists())
             saveResource("messages.yml", false);
         messagesConfig = YamlConfiguration.loadConfiguration(messagesFile);
+
+        // Aggiorna automaticamente soltanto il file inglese originale. Un file
+        // personalizzato non viene toccato; prima della migrazione viene conservata
+        // anche una copia recuperabile.
+        boolean stockEnglishMessages = "&cNo permission.".equals(messagesConfig.getString("no-permission"))
+                && "&eStopped spectating.".equals(messagesConfig.getString("spectator-left"))
+                && "&a&lGO!".equals(messagesConfig.getString("race-started"))
+                && "&6&lFINISHED!".equals(messagesConfig.getString("finished-title"));
+        if (stockEnglishMessages) {
+            try {
+                File backup = new File(getDataFolder(), "messages-english-backup.yml");
+                Files.copy(messagesFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                saveResource("messages.yml", true);
+                messagesConfig = YamlConfiguration.loadConfiguration(messagesFile);
+                getLogger().info("Messaggi predefiniti migrati automaticamente in italiano.");
+            } catch (IOException e) {
+                getLogger().warning("Impossibile migrare messages.yml in italiano: " + e.getMessage());
+            }
+        }
     }
 
     public Component getMessage(String key) {
@@ -426,14 +464,98 @@ public class IceBoatRacing extends JavaPlugin {
 
     public void setPlayerArena(UUID uuid, String arenaName) {
         playerArenaMap.put(uuid, arenaName);
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null && antiCheatHook != null)
+            antiCheatHook.exempt(player);
     }
 
     public void removePlayerFromArenaMap(UUID uuid) {
         playerArenaMap.remove(uuid);
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null && raceClientHook != null)
+            raceClientHook.disableRacePhysics(player);
+        if (antiCheatHook != null)
+            antiCheatHook.releaseLater(uuid);
     }
 
     public boolean isRacer(UUID uuid) {
         return playerArenaMap.containsKey(uuid);
+    }
+
+    /** Saves state only once, before the plugin replaces inventory/scoreboard/game mode. */
+    public void capturePlayerState(Player player) {
+        // Non usare mai come stato originale una scoreboard IceBoat rimasta da una
+        // sessione precedente.
+        if (isIceBoatScoreboard(player.getScoreboard())) {
+            player.setScoreboard(Bukkit.getScoreboardManager().getNewScoreboard());
+        }
+        playerSessions.computeIfAbsent(player.getUniqueId(), ignored -> new PlayerSessionData(player));
+    }
+
+    /** Restores and consumes the saved state so a later session gets a fresh snapshot. */
+    public void restorePlayerState(Player player) {
+        PlayerSessionData session = playerSessions.remove(player.getUniqueId());
+        Scoreboard targetScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        if (session != null) {
+            targetScoreboard = session.getScoreboard();
+            session.restore(player);
+        }
+        targetScoreboard = getSafeRestoredScoreboard(targetScoreboard);
+        player.setScoreboard(targetScoreboard);
+        player.setGameMode(org.bukkit.GameMode.ADVENTURE);
+        player.setFlying(false);
+        player.setAllowFlight(false);
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            viewer.showPlayer(this, player);
+        }
+        ensureRaceScoreboardIsGone(player, targetScoreboard);
+    }
+
+    public void restorePlayerScoreboard(Player player) {
+        PlayerSessionData session = playerSessions.get(player.getUniqueId());
+        Scoreboard targetScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        if (session != null) {
+            targetScoreboard = session.getScoreboard();
+        }
+        targetScoreboard = getSafeRestoredScoreboard(targetScoreboard);
+        player.setScoreboard(targetScoreboard);
+        ensureRaceScoreboardIsGone(player, targetScoreboard);
+    }
+
+    private boolean isIceBoatScoreboard(Scoreboard scoreboard) {
+        if (scoreboard == null)
+            return false;
+        boolean raceBoard = scoreboard.getObjective("IceRace") != null && scoreboard.getTeam("stats") != null;
+        boolean lobbyBoard = scoreboard.getObjective("Lobby") != null && scoreboard.getTeam("status") != null;
+        if (raceBoard || lobbyBoard)
+            return true;
+
+        // Riconosce anche scoreboard create da vecchie versioni del plugin, come
+        // quella con titolo "-- Boat Race --".
+        for (org.bukkit.scoreboard.Objective objective : scoreboard.getObjectives()) {
+            String title = PlainTextComponentSerializer.plainText().serialize(objective.displayName())
+                    .toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
+            if (title.contains("boatrace") || title.contains("iceboatracing"))
+                return true;
+        }
+        return false;
+    }
+
+    private Scoreboard getSafeRestoredScoreboard(Scoreboard scoreboard) {
+        return isIceBoatScoreboard(scoreboard)
+                ? Bukkit.getScoreboardManager().getNewScoreboard()
+                : scoreboard;
+    }
+
+    private void ensureRaceScoreboardIsGone(Player player, Scoreboard restoredScoreboard) {
+        Scoreboard safeScoreboard = getSafeRestoredScoreboard(restoredScoreboard);
+        for (long delay : new long[] { 1L, 10L }) {
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline() && isIceBoatScoreboard(player.getScoreboard())) {
+                    player.setScoreboard(safeScoreboard);
+                }
+            }, delay);
+        }
     }
 
     // --- SAVE LOGIC (ARENAS.YML) ---

@@ -5,16 +5,16 @@ package peyaj.arena;
  */
 public enum SpectatorMode {
     /** Free flying around the arena */
-    FREE_FLY("Free Fly", "Fly freely around the arena"),
+    FREE_FLY("Volo libero", "Vola liberamente nell'arena"),
 
     /** Automatically follow the race leader */
-    FOLLOW_LEADER("Follow Leader", "Camera follows 1st place"),
+    FOLLOW_LEADER("Segui il leader", "La visuale segue il primo classificato"),
 
     /** Follow a specific player */
-    FOLLOW_PLAYER("Follow Player", "Pick a racer to follow"),
+    FOLLOW_PLAYER("Segui pilota", "Scegli un pilota da seguire"),
 
     /** Cinematic auto-rotating view */
-    CINEMATIC("Cinematic", "Epic cinematic camera angles");
+    CINEMATIC("Cinematica", "Inquadrature automatiche della gara");
 
     public final String displayName;
     public final String description;

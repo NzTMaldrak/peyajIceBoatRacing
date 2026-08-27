@@ -1,74 +1,72 @@
 prefix: "&b&l[IceBoat] &r"
-no-permission: "&cNo permission."
-only-players: "&cOnly players can use this command."
-reload-success: "&aConfiguration and messages reloaded."
-invalid-arena: "&cArena not found."
-not-in-race: "&cYou are not in a race."
+no-permission: "&cNon hai il permesso."
+only-players: "&cSolo i giocatori possono usare questo comando."
+reload-success: "&aConfigurazione e messaggi ricaricati."
+invalid-arena: "&cArena non trovata."
+not-in-race: "&cNon sei in una gara."
 
-# Arena Messages
-arena-joined: "&aJoined arena &f{arena}"
-arena-spectating: "&bYou are now spectating &f{arena}"
-arena-left: "&eLeft the race."
-spectator-left: "&eStopped spectating."
-race-already-active: "&cCannot start Time Trial while race is active."
-race-starting: "&eRace starting in &f{time}s"
-race-started: "&a&lGO!"
-race-ended: "&eRace ended."
+# Messaggi dell'arena
+arena-joined: "&aSei entrato nell'arena &f{arena}"
+arena-spectating: "&bOra stai osservando &f{arena}"
+arena-left: "&eHai abbandonato la gara."
+spectator-left: "&eSei uscito dalla modalità spettatore."
+race-already-active: "&cNon puoi avviare una prova a tempo mentre è in corso una gara."
+race-starting: "&eLa gara inizia tra &f{time}s"
+race-started: "&a&lVIA!"
+race-ended: "&eGara terminata."
 
-# Gameplay
-checkpoint-reach: "" # Leave empty to disable message (Sound still plays)
-lap-message: "&6Lap {lap}/{total}"
-wrong-way: "&c&lWRONG WAY!"
-respawn-success: "&aRespawned at last checkpoint!"
-stuck-tip: "&e&lTIP: &fStuck? Type &a/checkpoint &fto respawn!"
+# Gioco
+checkpoint-reach: "" # Lascia vuoto per disattivare il messaggio (il suono verrà comunque riprodotto)
+lap-message: "&6Giro {lap}/{total}"
+wrong-way: "&c&lDIREZIONE SBAGLIATA!"
+respawn-success: "&aSei tornato all'ultimo checkpoint!"
+stuck-tip: "&e&lCONSIGLIO: &fSei bloccato? Scrivi &a/checkpoint &fper tornare in pista!"
 
-# Results
-finished-title: "&6&lFINISHED!"
-finished-subtitle: "&eTime: {time}"
-finish-broadcast: "&f{player} &efinished &f{arena} &ein &b{time}&e!"
-new-pb: "&bNew Personal Best: {time}"
-new-server-record: "&6&lNEW SERVER RECORD! &eGhost saved."
+# Risultati
+finished-title: "&6&lARRIVATO!"
+finished-subtitle: "&eTempo: {time}"
+finish-broadcast: "&f{player} &eha completato &f{arena} &ein &b{time}&e!"
+new-pb: "&bNuovo record personale: {time}"
+new-server-record: "&6&lNUOVO RECORD DEL SERVER! &eGhost salvato."
 
-# ========== v3.0 NEW MESSAGES ==========
+# Sistema dei gruppi
+party-created: "&aGruppo creato! Invita i giocatori con &f/race party invite <giocatore>"
+party-already-in: "&cSei già in un gruppo."
+party-not-leader: "&cSolo il capo del gruppo può farlo."
+party-not-in-party: "&cNon fai parte di un gruppo."
+party-invite-sent: "&aInvito al gruppo inviato a &f{player}"
+party-invite-received: "&a{player} &eti ha invitato nel suo gruppo! Usa &f/race party accept &eper entrare."
+party-invite-expired: "&cIl tuo invito al gruppo è scaduto."
+party-no-invite: "&cNon hai inviti al gruppo in sospeso."
+party-joined: "&a{player} &eè entrato nel gruppo!"
+party-left: "&e{player} &7ha lasciato il gruppo."
+party-kicked: "&cSei stato espulso dal gruppo."
+party-player-kicked: "&e{player} &7è stato espulso dal gruppo."
+party-full: "&cIl gruppo è pieno (massimo 8 membri)."
+party-disbanded: "&eIl gruppo è stato sciolto."
 
-# Party System
-party-created: "&aParty created! Invite players with &f/race party invite <player>"
-party-already-in: "&cYou are already in a party."
-party-not-leader: "&cOnly the party leader can do this."
-party-not-in-party: "&cYou are not in a party."
-party-invite-sent: "&aSent party invite to &f{player}"
-party-invite-received: "&a{player} &einvited you to their party! &f/race party accept &eto join."
-party-invite-expired: "&cYour party invite has expired."
-party-no-invite: "&cYou have no pending party invite."
-party-joined: "&a{player} &ejoined the party!"
-party-left: "&e{player} &7left the party."
-party-kicked: "&cYou were kicked from the party."
-party-player-kicked: "&e{player} &7was kicked from the party."
-party-full: "&cParty is full (max 8 members)."
-party-disbanded: "&eThe party has been disbanded."
+# Modalità eliminazione
+elimination-warning: "&c&l⚠ ATTENZIONE: &fL'ultimo classificato verrà eliminato!"
+eliminated: "&c&lELIMINATO!"
+eliminated-broadcast: "&c☠ {player} è stato eliminato!"
+last-one-standing: "&a&lSei l'ultimo pilota rimasto!"
 
-# Elimination Mode
-elimination-warning: "&c&l⚠ WARNING: &fLast place will be eliminated!"
-eliminated: "&c&lELIMINATED!"
-eliminated-broadcast: "&c💀 {player} has been eliminated!"
-last-one-standing: "&a&lYou are the last racer standing!"
+# Modalità spettatore
+spectator-mode-changed: "&bModalità visuale: &f{mode}"
+spectator-select-player: "&eClicca un giocatore per seguirlo."
+spectator-following: "&bOra stai seguendo: &f{player}"
 
-# Spectator Mode
-spectator-mode-changed: "&bCamera mode: &f{mode}"
-spectator-select-player: "&eClick a player to follow them."
-spectator-following: "&bNow following: &f{player}"
+# Vittoria
+victory-broadcast: "&6&l🏆 {player} VINCE LA GARA! 🏆"
 
-# Victory
-victory-broadcast: "&6&l🏆 {player} WINS THE RACE! 🏆"
+# Replay
+replay-started: "&aRiproduzione del replay avviata. Usa &f/race replay stop &aper uscire."
+replay-stopped: "&eRiproduzione del replay interrotta."
+replay-not-found: "&cNessun replay trovato per questa arena."
+replay-none-available: "&7Nessun replay disponibile per {arena}"
 
-# Replays
-replay-started: "&aPlaying replay... Use &f/race replay stop &ato exit."
-replay-stopped: "&eStopped replay playback."
-replay-not-found: "&cNo replay found for that arena."
-replay-none-available: "&7No replays available for {arena}"
+# Titoli
+title-unlocked: "&d&lNUOVO TITOLO SBLOCCATO: &f{title}"
 
-# Titles
-title-unlocked: "&d&lNEW TITLE UNLOCKED: &f{title}"
-
-# Usage Messages
-race-usage: "&eUsage: /race <start|stop|join|leave|vote|admin|party|replay>"
+# Utilizzo
+race-usage: "&eUtilizzo: /race <start|stop|join|leave|vote|admin|party|replay>"

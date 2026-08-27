@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "iceboatracing_client",
+  "version": "${version}",
+  "name": "IceBoatRacing Client",
+  "description": "Fisica nativa delle barche per le gare IceBoatRacing.",
+  "authors": ["peyaj"],
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "peyaj.iceboatracing.client.IceBoatRacingClient"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "iceboatracing-client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "fabric-api": ">=0.158.0",
+    "minecraft": "26.2",
+    "java": ">=25"
+  }
+}

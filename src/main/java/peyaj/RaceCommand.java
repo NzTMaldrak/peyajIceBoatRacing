@@ -33,7 +33,7 @@ public class RaceCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
         if (!(sender instanceof Player p)) {
-            sender.sendMessage("Only players can run this command.");
+            sender.sendMessage("Solo i giocatori possono usare questo comando.");
             return true;
         }
 
@@ -88,7 +88,7 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         if (args.length < 2) {
-            p.sendMessage(Component.text("Usage: /race start <arena>", NamedTextColor.RED));
+            p.sendMessage(Component.text("Utilizzo: /race start <arena>", NamedTextColor.RED));
             return;
         }
         String arenaName = args[1];
@@ -98,7 +98,7 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         arena.startRace();
-        p.sendMessage(Component.text("Force started race on " + arenaName, NamedTextColor.GREEN));
+        p.sendMessage(Component.text("Gara avviata forzatamente su " + arenaName, NamedTextColor.GREEN));
     }
 
     private void handleStop(Player p, String[] args) {
@@ -107,7 +107,7 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         if (args.length < 2) {
-            p.sendMessage(Component.text("Usage: /race stop <arena>", NamedTextColor.RED));
+            p.sendMessage(Component.text("Utilizzo: /race stop <arena>", NamedTextColor.RED));
             return;
         }
         String arenaName = args[1];
@@ -117,12 +117,12 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         arena.stopRace();
-        p.sendMessage(Component.text("Stopped race on " + arenaName, NamedTextColor.YELLOW));
+        p.sendMessage(Component.text("Gara interrotta su " + arenaName, NamedTextColor.YELLOW));
     }
 
     private void handleVote(Player p) {
         if (!plugin.isVoting) {
-            p.sendMessage(Component.text("No vote in progress.", NamedTextColor.RED));
+            p.sendMessage(Component.text("Non c'è alcuna votazione in corso.", NamedTextColor.RED));
             return;
         }
         plugin.guiManager.openVoteMenu(p);
@@ -130,11 +130,11 @@ public class RaceCommand implements CommandExecutor {
 
     private void handleJoin(Player p, String[] args) {
         if (args.length < 2) {
-            p.sendMessage(Component.text("Usage: /race join <arena>", NamedTextColor.RED));
+            p.sendMessage(Component.text("Utilizzo: /race join <arena>", NamedTextColor.RED));
             return;
         }
         if (plugin.isRacer(p.getUniqueId())) {
-            p.sendMessage(Component.text("You are already in an arena! Use /race leave first.", NamedTextColor.RED));
+            p.sendMessage(Component.text("Sei già in un'arena! Prima usa /race leave.", NamedTextColor.RED));
             return;
         }
         
@@ -165,14 +165,14 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         if (args.length < 2) {
-            p.sendMessage(Component.text("Usage: /race replay <list|watch|stop> [arena] [index]", NamedTextColor.RED));
+            p.sendMessage(Component.text("Utilizzo: /race replay <list|watch|stop> [arena] [indice]", NamedTextColor.RED));
             return;
         }
         String action = args[1].toLowerCase();
         switch (action) {
             case "list" -> {
                 if (args.length < 3) {
-                    p.sendMessage(Component.text("Usage: /race replay list <arena>", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Utilizzo: /race replay list <arena>", NamedTextColor.RED));
                     return;
                 }
                 String arenaName = args[2];
@@ -183,23 +183,23 @@ public class RaceCommand implements CommandExecutor {
                 }
                 List<ReplayData> replays = plugin.replayManager.getReplays(arenaName);
                 if (replays.isEmpty()) {
-                    p.sendMessage(Component.text("No replays available for " + arenaName, NamedTextColor.YELLOW));
+                    p.sendMessage(Component.text("Nessun replay disponibile per " + arenaName, NamedTextColor.YELLOW));
                     return;
                 }
-                p.sendMessage(Component.text("--- Replays for " + arenaName + " ---", NamedTextColor.GOLD));
+                p.sendMessage(Component.text("--- Replay di " + arenaName + " ---", NamedTextColor.GOLD));
                 for (int i = 0; i < replays.size(); i++) {
                     ReplayData r = replays.get(i);
                     String date = new java.text.SimpleDateFormat("MM/dd HH:mm")
                             .format(new java.util.Date(r.getTimestamp()));
                     p.sendMessage(
-                            Component.text("  [" + i + "] " + date + " - " + r.getPlayerNames().size() + " racers",
+                            Component.text("  [" + i + "] " + date + " - " + r.getPlayerNames().size() + " piloti",
                                     NamedTextColor.AQUA));
                 }
-                p.sendMessage(Component.text("Use /race replay watch <arena> <index> to watch", NamedTextColor.GRAY));
+                p.sendMessage(Component.text("Usa /race replay watch <arena> <indice> per guardarlo", NamedTextColor.GRAY));
             }
             case "watch" -> {
                 if (args.length < 4) {
-                    p.sendMessage(Component.text("Usage: /race replay watch <arena> <index>", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Utilizzo: /race replay watch <arena> <indice>", NamedTextColor.RED));
                     return;
                 }
                 String arenaName = args[2];
@@ -212,12 +212,12 @@ public class RaceCommand implements CommandExecutor {
                 try {
                     index = Integer.parseInt(args[3]);
                 } catch (NumberFormatException e) {
-                    p.sendMessage(Component.text("Invalid index.", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Indice non valido.", NamedTextColor.RED));
                     return;
                 }
                 List<ReplayData> replays = plugin.replayManager.getReplays(arenaName);
                 if (index < 0 || index >= replays.size()) {
-                    p.sendMessage(Component.text("Replay index out of range.", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Indice del replay fuori intervallo.", NamedTextColor.RED));
                     return;
                 }
                 ReplayData replay = replays.get(index);
@@ -225,7 +225,7 @@ public class RaceCommand implements CommandExecutor {
                         arena.getSpawns().isEmpty() ? p.getWorld() : arena.getSpawns().get(0).getWorld());
             }
             case "stop" -> plugin.replayManager.stopPlayback(p);
-            default -> p.sendMessage(Component.text("Unknown action. Use list, watch, or stop.", NamedTextColor.RED));
+            default -> p.sendMessage(Component.text("Azione sconosciuta. Usa list, watch oppure stop.", NamedTextColor.RED));
         }
     }
 
@@ -235,7 +235,7 @@ public class RaceCommand implements CommandExecutor {
             return;
         }
         if (args.length < 2) {
-            p.sendMessage(Component.text("Usage: /race admin <wand|startvote|delete|visualize|reload|setmainlobby>",
+            p.sendMessage(Component.text("Utilizzo: /race admin <wand|startvote|delete|visualize|reload|setmainlobby>",
                     NamedTextColor.RED));
             return;
         }
@@ -245,19 +245,19 @@ public class RaceCommand implements CommandExecutor {
             case "wand" -> {
                 ItemStack wand = new ItemStack(Material.BLAZE_ROD);
                 ItemMeta meta = wand.getItemMeta();
-                meta.displayName(Component.text("§b§lRace Wand §7(Click to cycle modes)"));
+                meta.displayName(Component.text("§b§lBacchetta gara §7(Clicca per cambiare modalità)"));
                 meta.lore(List.of(
-                        Component.text("§7Left-Click: Add point"),
-                        Component.text("§7Right-Click: Cycle mode"),
-                        Component.text("§7Shift+Right: Remove point")));
+                        Component.text("§7Click sinistro: aggiungi punto"),
+                        Component.text("§7Click destro: cambia modalità"),
+                        Component.text("§7Shift + destro: rimuovi punto")));
                 meta.getPersistentDataContainer().set(plugin.guiManager.raceWandKey, PersistentDataType.BYTE, (byte) 1);
                 wand.setItemMeta(meta);
                 p.getInventory().addItem(wand);
-                p.sendMessage(Component.text("Race Wand given!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Bacchetta gara ricevuta!", NamedTextColor.GREEN));
 
                 // Check if in editor mode
                 if (!plugin.editorArena.containsKey(p.getUniqueId())) {
-                    p.sendMessage(Component.text("Tip: Open the Admin Panel and select an arena to edit it.",
+                    p.sendMessage(Component.text("Consiglio: apri il pannello amministratore e scegli l'arena da modificare.",
                             NamedTextColor.YELLOW));
                 }
             }
@@ -270,11 +270,11 @@ public class RaceCommand implements CommandExecutor {
                     }
                 }
                 plugin.startVotingRound(duration);
-                p.sendMessage(Component.text("Voting started for " + duration + " seconds!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Votazione avviata per " + duration + " secondi!", NamedTextColor.GREEN));
             }
             case "delete" -> {
                 if (args.length < 3) {
-                    p.sendMessage(Component.text("Usage: /race admin delete <arena>", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Utilizzo: /race admin delete <arena>", NamedTextColor.RED));
                     return;
                 }
                 String arenaName = args[2];
@@ -284,11 +284,11 @@ public class RaceCommand implements CommandExecutor {
                 }
                 plugin.removeArena(arenaName);
                 plugin.saveArenas();
-                p.sendMessage(Component.text("Arena " + arenaName + " deleted.", NamedTextColor.YELLOW));
+                p.sendMessage(Component.text("Arena " + arenaName + " eliminata.", NamedTextColor.YELLOW));
             }
             case "visualize" -> {
                 if (args.length < 3) {
-                    p.sendMessage(Component.text("Usage: /race admin visualize <arena>", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Utilizzo: /race admin visualize <arena>", NamedTextColor.RED));
                     return;
                 }
                 String arenaName = args[2];
@@ -299,15 +299,15 @@ public class RaceCommand implements CommandExecutor {
                 if (plugin.activeVisualizers.containsKey(p.getUniqueId())
                         && plugin.activeVisualizers.get(p.getUniqueId()).equals(arenaName)) {
                     plugin.activeVisualizers.remove(p.getUniqueId());
-                    p.sendMessage(Component.text("Visualizer disabled for " + arenaName, NamedTextColor.YELLOW));
+                    p.sendMessage(Component.text("Visualizzatore disattivato per " + arenaName, NamedTextColor.YELLOW));
                 } else {
                     plugin.activeVisualizers.put(p.getUniqueId(), arenaName);
-                    p.sendMessage(Component.text("Visualizer enabled for " + arenaName, NamedTextColor.GREEN));
+                    p.sendMessage(Component.text("Visualizzatore attivato per " + arenaName, NamedTextColor.GREEN));
                 }
             }
             case "reload" -> {
                 plugin.reload();
-                p.sendMessage(Component.text("Configuration reloaded!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Configurazione ricaricata!", NamedTextColor.GREEN));
             }
             case "setmainlobby" -> {
                 Location loc = p.getLocation();
@@ -316,9 +316,9 @@ public class RaceCommand implements CommandExecutor {
                     arena.setMainLobby(loc);
                 }
                 plugin.saveArenas();
-                p.sendMessage(Component.text("Main lobby set for all arenas!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Lobby principale impostata per tutte le arene!", NamedTextColor.GREEN));
             }
-            default -> p.sendMessage(Component.text("Unknown admin action.", NamedTextColor.RED));
+            default -> p.sendMessage(Component.text("Azione amministrativa sconosciuta.", NamedTextColor.RED));
         }
     }
 }

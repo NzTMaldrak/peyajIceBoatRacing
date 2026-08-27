@@ -67,12 +67,12 @@ public class IceBoatPlaceholders extends PlaceholderExpansion {
         // %iceboat_current_arena%
         if (params.equalsIgnoreCase("current_arena")) {
             var arena = plugin.getPlayerArena(offlinePlayer.getUniqueId());
-            return arena != null ? arena.getName() : "None";
+            return arena != null ? arena.getName() : "Nessuna";
         }
 
         // %iceboat_in_race%
         if (params.equalsIgnoreCase("in_race")) {
-            return plugin.isRacer(offlinePlayer.getUniqueId()) ? "Yes" : "No";
+            return plugin.isRacer(offlinePlayer.getUniqueId()) ? "Sì" : "No";
         }
 
         // %iceboat_title%
@@ -118,20 +118,20 @@ public class IceBoatPlaceholders extends PlaceholderExpansion {
         int races = plugin.getStat(player.getUniqueId(), "races_played");
 
         if (wins >= 100)
-            return "§6§lLegend";
+            return "§6§lLeggenda";
         if (wins >= 50)
-            return "§c§lChampion";
+            return "§c§lCampione";
         if (wins >= 25)
-            return "§d§lMaster";
+            return "§d§lMaestro";
         if (wins >= 10)
-            return "§b§lVeteran";
+            return "§b§lVeterano";
         if (wins >= 5)
-            return "§a§lRacer";
+            return "§a§lPilota";
         if (races >= 10)
-            return "§e§lEnthusiast";
+            return "§e§lAppassionato";
         if (races >= 1)
-            return "§7§lNewcomer";
-        return "§8§lRookie";
+            return "§7§lEsordiente";
+        return "§8§lPrincipiante";
     }
 
     private String formatTime(long millis) {

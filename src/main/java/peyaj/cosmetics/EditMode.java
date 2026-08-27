@@ -6,13 +6,13 @@ import net.kyori.adventure.text.format.NamedTextColor;
  * Represents the edit mode for the arena wand tool.
  */
 public enum EditMode {
-    SPAWN("Spawn Points", NamedTextColor.GREEN),
+    SPAWN("Punti di partenza", NamedTextColor.GREEN),
     CHECKPOINT("Checkpoints", NamedTextColor.RED),
-    FINISH_1("Finish Pos 1", NamedTextColor.AQUA),
-    FINISH_2("Finish Pos 2", NamedTextColor.AQUA),
-    LOBBY("Pre-Lobby", NamedTextColor.GOLD),
-    MAIN_LOBBY("Main Lobby", NamedTextColor.YELLOW),
-    LEADERBOARD("Leaderboard Holo", NamedTextColor.LIGHT_PURPLE);
+    FINISH_1("Traguardo punto 1", NamedTextColor.AQUA),
+    FINISH_2("Traguardo punto 2", NamedTextColor.AQUA),
+    LOBBY("Lobby pre-gara", NamedTextColor.GOLD),
+    MAIN_LOBBY("Lobby principale", NamedTextColor.YELLOW),
+    LEADERBOARD("Ologramma classifica", NamedTextColor.LIGHT_PURPLE);
 
     public final String displayName;
     public final NamedTextColor color;

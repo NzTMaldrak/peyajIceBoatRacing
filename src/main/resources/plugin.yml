@@ -1,10 +1,10 @@
 name: IceBoatRacing
 version: 3.2.1
 main: peyaj.IceBoatRacing
-api-version: "1.21"
+api-version: "26.2"
 authors: [peyaj]
 description: Multi-arena Ice Boat Racing plugin with GUI, Replays, Parties, and more.
-softdepend: [PlaceholderAPI]
+softdepend: [PlaceholderAPI, GrimAC, Spartan]
 
 commands:
   race:

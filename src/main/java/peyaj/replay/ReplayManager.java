@@ -207,13 +207,13 @@ public class ReplayManager {
      */
     public boolean startPlayback(Player viewer, ReplayData replay, World world) {
         if (activePlaybacks.containsKey(viewer.getUniqueId())) {
-            viewer.sendMessage(Component.text("You are already watching a replay! Use /race replay stop first.",
+            viewer.sendMessage(Component.text("Stai già guardando un replay! Prima usa /race replay stop.",
                     NamedTextColor.RED));
             return false;
         }
 
         if (replay.getFrames().isEmpty()) {
-            viewer.sendMessage(Component.text("This replay has no data!", NamedTextColor.RED));
+            viewer.sendMessage(Component.text("Questo replay non contiene dati!", NamedTextColor.RED));
             return false;
         }
 
@@ -231,7 +231,7 @@ public class ReplayManager {
         activePlaybacks.put(viewer.getUniqueId(), playback);
         playback.start();
 
-        viewer.sendMessage(Component.text("▶ Replay started! Use /race replay stop to exit.", NamedTextColor.GREEN));
+        viewer.sendMessage(Component.text("▶ Replay avviato! Usa /race replay stop per uscire.", NamedTextColor.GREEN));
         viewer.playSound(viewer.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 2f);
 
         return true;
@@ -244,8 +244,8 @@ public class ReplayManager {
         ReplayPlayback playback = activePlaybacks.remove(viewer.getUniqueId());
         if (playback != null) {
             playback.stop();
-            viewer.setGameMode(GameMode.SURVIVAL);
-            viewer.sendMessage(Component.text("⏹ Replay stopped.", NamedTextColor.YELLOW));
+            viewer.setGameMode(GameMode.ADVENTURE);
+            viewer.sendMessage(Component.text("⏹ Replay interrotto.", NamedTextColor.YELLOW));
         }
     }
 
@@ -289,7 +289,7 @@ public class ReplayManager {
                     if (!viewer.isOnline() || currentFrame >= replay.getFrames().size()) {
                         // Replay finished or player offline
                         if (viewer.isOnline()) {
-                            viewer.sendMessage(Component.text("⏹ Replay finished!", NamedTextColor.GOLD));
+                            viewer.sendMessage(Component.text("⏹ Replay terminato!", NamedTextColor.GOLD));
                         }
                         stopPlayback(viewer);
                         return;
@@ -309,7 +309,7 @@ public class ReplayManager {
                     // Update action bar with progress
                     int progress = (currentFrame * 100) / replay.getFrames().size();
                     viewer.sendActionBar(Component.text(
-                            "§b▶ Replay: " + progress + "% §7| §e" + replay.getPlayerNames().size() + " racers"));
+                            "§b▶ Replay: " + progress + "% §7| §e" + replay.getPlayerNames().size() + " piloti"));
 
                     currentFrame++;
                 }

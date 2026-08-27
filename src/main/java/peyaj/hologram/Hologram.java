@@ -66,9 +66,12 @@ public class Hologram {
     }
 
     public synchronized void remove() {
-        TextDisplay display = getDisplayEntity();
-        if (display != null && display.isValid()) {
-            display.remove();
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            for (TextDisplay display : new ArrayList<>(world.getEntitiesByClass(TextDisplay.class))) {
+                if (isThisHologram(display)) {
+                    display.remove();
+                }
+            }
         }
         textDisplayUuid = null;
     }
@@ -78,24 +81,43 @@ public class Hologram {
             return null;
         }
 
-        // Try getting existing entity from stored UUID
+        // Make sure the configured chunk is loaded before looking for persisted displays.
+        if (!location.getChunk().isLoaded()) {
+            location.getChunk().load();
+        }
+
+        TextDisplay selected = null;
+
+        // Prefer the entity already tracked by this instance.
         if (textDisplayUuid != null) {
             Entity entity = Bukkit.getEntity(textDisplayUuid);
-            if (entity instanceof TextDisplay textDisplay && textDisplay.isValid()) {
-                return textDisplay;
+            if (entity instanceof TextDisplay textDisplay && textDisplay.isValid() && isThisHologram(textDisplay)) {
+                selected = textDisplay;
             }
         }
 
-        // Search for existing tagged TextDisplay entity near the location
-        for (Entity nearby : location.getWorld().getNearbyEntities(location, 2.0, 2.0, 2.0)) {
-            if (nearby instanceof TextDisplay textDisplay) {
-                String taggedId = textDisplay.getPersistentDataContainer().get(key, PersistentDataType.STRING);
-                if (Objects.equals(taggedId, id)) {
-                    textDisplayUuid = textDisplay.getUniqueId();
-                    textDisplay.setSeeThrough(true);
-                    return textDisplay;
+        // Find persisted copies globally. Keep one and remove every duplicate with the same ID.
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            for (TextDisplay display : new ArrayList<>(world.getEntitiesByClass(TextDisplay.class))) {
+                if (!isThisHologram(display))
+                    continue;
+                if (selected == null) {
+                    selected = display;
+                } else if (!selected.getUniqueId().equals(display.getUniqueId())) {
+                    display.remove();
                 }
             }
+        }
+
+        if (selected != null && selected.isValid()) {
+            textDisplayUuid = selected.getUniqueId();
+            selected.setBillboard(Display.Billboard.CENTER);
+            selected.setShadowed(true);
+            selected.setBackgroundColor(Color.fromARGB(100, 0, 0, 0));
+            selected.setSeeThrough(true);
+            selected.teleport(location);
+            selected.text(cachedComponent != null ? cachedComponent : buildComponent(lines));
+            return selected;
         }
 
         // Spawn new TextDisplay entity
@@ -123,6 +145,11 @@ public class Hologram {
             }
         }
         return null;
+    }
+
+    private boolean isThisHologram(TextDisplay display) {
+        String taggedId = display.getPersistentDataContainer().get(key, PersistentDataType.STRING);
+        return Objects.equals(taggedId, id);
     }
 
     private Component buildComponent(List<String> textLines) {

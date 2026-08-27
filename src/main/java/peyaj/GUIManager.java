@@ -16,6 +16,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.NamespacedKey;
 import peyaj.arena.RaceState;
@@ -34,12 +35,14 @@ public class GUIManager implements Listener {
     private final IceBoatRacing plugin;
     private final NamespacedKey arenaKey;
     private final NamespacedKey trailKey;
+    private final NamespacedKey spectatorTargetKey;
     public final NamespacedKey raceWandKey;
 
     public GUIManager(IceBoatRacing plugin) {
         this.plugin = plugin;
         this.arenaKey = new NamespacedKey(plugin, "arena_key");
         this.trailKey = new NamespacedKey(plugin, "trail_key");
+        this.spectatorTargetKey = new NamespacedKey(plugin, "spectator_target");
         this.raceWandKey = new NamespacedKey(plugin, "race_wand");
     }
 
@@ -47,29 +50,30 @@ public class GUIManager implements Listener {
         Inventory inv = Bukkit.createInventory(null, 27, Component.text("IceBoat Racing", NamedTextColor.AQUA));
 
         // Play Button
-        inv.setItem(11, createItem(Material.OAK_BOAT, "&b&lPlay", "&7Join a race!"));
+        inv.setItem(11, createItem(Material.OAK_BOAT, "&b&lGioca", "&7Entra in una gara!"));
 
         // Cosmetics Button
-        inv.setItem(13, createItem(Material.DIAMOND, "&d&lCosmetics", "&7Cages & Trails"));
+        inv.setItem(13, createItem(Material.DIAMOND, "&d&lCosmetici", "&7Gabbie e scie"));
 
         // Vote Button (Dynamic)
         if (plugin.isVoting) {
-            inv.setItem(22, createItem(Material.PAPER, "&a&lVOTE NOW!", "&7Click to vote for map",
-                    "&eEnds in: " + plugin.votingTimeRemaining + "s"));
+            inv.setItem(22, createItem(Material.PAPER, "&a&lVOTA ORA!", "&7Clicca per votare la mappa",
+                    "&eTermina tra: " + plugin.votingTimeRemaining + "s"));
         }
 
         // Stats Button
         int wins = plugin.getStat(p.getUniqueId(), "wins");
         int played = plugin.getStat(p.getUniqueId(), "races_played");
-        inv.setItem(15, createItem(Material.PAPER, "&e&lYour Stats",
-                "&7Wins: &a" + wins,
-                "&7Races: &f" + played,
+        inv.setItem(15, createItem(Material.PAPER, "&e&lLe tue statistiche",
+                "&7Vittorie: &a" + wins,
+                "&7Gare: &f" + played,
                 "",
-                "&7Win Rate: &b" + (played > 0 ? (wins * 100 / played) : 0) + "%"));
+                "&7Percentuale vittorie: &b" + (played > 0 ? (wins * 100 / played) : 0) + "%"));
 
         // Admin Button
         if (p.hasPermission("race.admin")) {
-            inv.setItem(26, createItem(Material.COMMAND_BLOCK, "&c&lAdmin Panel", "&7Manage tracks & Settings"));
+            inv.setItem(26, createItem(Material.COMMAND_BLOCK, "&c&lPannello amministratore",
+                    "&7Gestisci piste e impostazioni"));
         }
 
         fillGlass(inv);
@@ -79,12 +83,12 @@ public class GUIManager implements Listener {
 
     public void openVoteMenu(Player p) {
         if (!plugin.isVoting) {
-            p.sendMessage(Component.text("No voting is currently active.", NamedTextColor.RED));
+            p.sendMessage(Component.text("Non c'è alcuna votazione in corso.", NamedTextColor.RED));
             return;
         }
 
         int size = 27;
-        Inventory inv = Bukkit.createInventory(null, size, Component.text("Vote for Map", NamedTextColor.DARK_GREEN));
+        Inventory inv = Bukkit.createInventory(null, size, Component.text("Vota la mappa", NamedTextColor.DARK_GREEN));
 
         for (RaceArena arena : plugin.getArenas().values()) {
             if (arena.getState() != RaceState.LOBBY)
@@ -95,11 +99,11 @@ public class GUIManager implements Listener {
                     && plugin.playerVotes.get(p.getUniqueId()).equals(arena.getName());
 
             ItemStack item = createItem(Material.MAP, "&b&l" + arena.getName(),
-                    "&7Type: &f" + arena.getType(),
-                    "&7Laps: &f" + arena.getTotalLaps(),
+                    "&7Tipo: &f" + arena.getType(),
+                    "&7Giri: &f" + arena.getTotalLaps(),
                     "",
-                    "&e&lVotes: " + votes,
-                    playerVotedThis ? "&a&l[ YOUR VOTE ]" : "&7Click to Vote");
+                    "&e&lVoti: " + votes,
+                    playerVotedThis ? "&a&l[ IL TUO VOTO ]" : "&7Clicca per votare");
 
             ItemMeta meta = item.getItemMeta();
             meta.getPersistentDataContainer().set(arenaKey, PersistentDataType.STRING, arena.getName());
@@ -116,37 +120,62 @@ public class GUIManager implements Listener {
     }
 
     public void openCosmeticsHub(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Cosmetics Hub", NamedTextColor.LIGHT_PURPLE));
-        inv.setItem(11, createItem(Material.GLASS, "&d&lCage Colors", "&7Change your starting block color"));
-        inv.setItem(15, createItem(Material.FIREWORK_ROCKET, "&6&lParticle Trails", "&7Change your driving particle"));
-        inv.setItem(26, createItem(Material.ARROW, "&cBack", "&7Return to Main Menu"));
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Menu cosmetici", NamedTextColor.LIGHT_PURPLE));
+        inv.setItem(11, createItem(Material.GLASS, "&d&lColori gabbia", "&7Cambia il colore del blocco di partenza"));
+        inv.setItem(15, createItem(Material.FIREWORK_ROCKET, "&6&lScie di particelle", "&7Cambia le particelle di guida"));
+        inv.setItem(26, createItem(Material.ARROW, "&cIndietro", "&7Torna al menu principale"));
         fillGlass(inv);
+        p.openInventory(inv);
+    }
+
+    public void openSpectatorMenu(Player p, RaceArena arena) {
+        List<Player> targets = arena.getSpectatablePlayers();
+        int size = Math.max(9, Math.min(54, ((targets.size() + 8) / 9) * 9));
+        Inventory inv = Bukkit.createInventory(null, size,
+                Component.text("Segui un pilota", NamedTextColor.DARK_AQUA));
+
+        for (Player target : targets) {
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta meta = (SkullMeta) head.getItemMeta();
+            meta.setOwningPlayer(target);
+            meta.displayName(Component.text(target.getName(), NamedTextColor.AQUA));
+            meta.lore(List.of(Component.text("Click per visuale in prima persona", NamedTextColor.GRAY),
+                    Component.text("SHIFT per tornare al volo libero", NamedTextColor.DARK_GRAY)));
+            meta.getPersistentDataContainer().set(spectatorTargetKey, PersistentDataType.STRING,
+                    target.getUniqueId().toString());
+            head.setItemMeta(meta);
+            inv.addItem(head);
+        }
+
+        if (targets.isEmpty()) {
+            inv.setItem(4, createItem(Material.BARRIER, "&cNessun pilota disponibile"));
+        }
         p.openInventory(inv);
     }
 
     public void openCageMenu(Player p) {
         Inventory inv = Bukkit.createInventory(null, 27,
-                Component.text("Select Cage Color", NamedTextColor.LIGHT_PURPLE));
-        inv.setItem(10, createCosmeticItem(Material.GLASS, "&fDefault (Clear)"));
-        inv.setItem(11, createCosmeticItem(Material.RED_STAINED_GLASS, "&cRed"));
-        inv.setItem(12, createCosmeticItem(Material.ORANGE_STAINED_GLASS, "&6Orange"));
-        inv.setItem(13, createCosmeticItem(Material.YELLOW_STAINED_GLASS, "&eYellow"));
-        inv.setItem(14, createCosmeticItem(Material.LIME_STAINED_GLASS, "&aLime"));
-        inv.setItem(15, createCosmeticItem(Material.LIGHT_BLUE_STAINED_GLASS, "&bLight Blue"));
+                Component.text("Scegli colore gabbia", NamedTextColor.LIGHT_PURPLE));
+        inv.setItem(10, createCosmeticItem(Material.GLASS, "&fPredefinito (trasparente)"));
+        inv.setItem(11, createCosmeticItem(Material.RED_STAINED_GLASS, "&cRosso"));
+        inv.setItem(12, createCosmeticItem(Material.ORANGE_STAINED_GLASS, "&6Arancione"));
+        inv.setItem(13, createCosmeticItem(Material.YELLOW_STAINED_GLASS, "&eGiallo"));
+        inv.setItem(14, createCosmeticItem(Material.LIME_STAINED_GLASS, "&aVerde lime"));
+        inv.setItem(15, createCosmeticItem(Material.LIGHT_BLUE_STAINED_GLASS, "&bAzzurro"));
         inv.setItem(16, createCosmeticItem(Material.MAGENTA_STAINED_GLASS, "&dMagenta"));
-        inv.setItem(26, createItem(Material.ARROW, "&cBack", "&7Return to Hub"));
+        inv.setItem(26, createItem(Material.ARROW, "&cIndietro", "&7Torna ai cosmetici"));
         fillGlass(inv);
         p.openInventory(inv);
     }
 
     public void openTrailMenu(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 36, Component.text("Select Particle Trail", NamedTextColor.GOLD));
+        Inventory inv = Bukkit.createInventory(null, 36, Component.text("Scegli scia di particelle", NamedTextColor.GOLD));
         TrailType current = plugin.getPlayerTrailPreference(p.getUniqueId());
         int slot = 10;
         for (TrailType trail : TrailType.values()) {
             boolean hasPerm = trail.permission == null || p.hasPermission(trail.permission);
             boolean isSelected = (trail == current);
-            String status = isSelected ? "&a&lSELECTED" : (hasPerm ? "&eClick to Select" : "&cLocked");
+            String status = isSelected ? "&a&lSELEZIONATA" : (hasPerm ? "&eClicca per selezionare" : "&cBloccata");
             Material mat = trail.icon;
             ItemStack item = createItem(mat, "&6&l" + trail.displayName, status);
             ItemMeta meta = item.getItemMeta();
@@ -160,47 +189,47 @@ public class GUIManager implements Listener {
             if ((slot + 1) % 9 == 0)
                 slot += 2;
         }
-        inv.setItem(31, createItem(Material.ARROW, "&cBack", "&7Return to Hub"));
+        inv.setItem(31, createItem(Material.ARROW, "&cIndietro", "&7Torna ai cosmetici"));
         fillGlass(inv);
         p.openInventory(inv);
     }
 
     public void openAdminPanel(Player p) {
         if (!p.hasPermission("race.admin")) {
-            p.sendMessage(Component.text("You do not have permission to access this menu.", NamedTextColor.RED));
+            p.sendMessage(Component.text("Non hai il permesso di accedere a questo menu.", NamedTextColor.RED));
             p.closeInventory();
             return;
         }
 
         Inventory inv = Bukkit.createInventory(null, 27,
-                Component.text("IceBoat Admin Panel", NamedTextColor.DARK_AQUA));
-        inv.setItem(10, createItem(Material.EMERALD_BLOCK, "&a&lCreate Arena", "&7Click to name new arena"));
-        inv.setItem(12, createItem(Material.CHEST_MINECART, "&e&lEdit Arenas", "&7Configure existing arenas"));
-        inv.setItem(14, createItem(Material.BLAZE_ROD, "&6&lGet Wand", "&7Give setup wand"));
-        inv.setItem(16, createItem(Material.REDSTONE_TORCH, "&c&lReload Plugin", "&7Reload config.yml"));
+                Component.text("Pannello amministratore IceBoat", NamedTextColor.DARK_AQUA));
+        inv.setItem(10, createItem(Material.EMERALD_BLOCK, "&a&lCrea arena", "&7Clicca per assegnare un nome"));
+        inv.setItem(12, createItem(Material.CHEST_MINECART, "&e&lModifica arene", "&7Configura le arene esistenti"));
+        inv.setItem(14, createItem(Material.BLAZE_ROD, "&6&lOttieni bacchetta", "&7Ricevi la bacchetta di configurazione"));
+        inv.setItem(16, createItem(Material.REDSTONE_TORCH, "&c&lRicarica plugin", "&7Ricarica config.yml"));
 
         // Admin Vote Button
-        inv.setItem(22, createItem(Material.BEACON, "&e&lStart Vote", "&7Force start voting round"));
+        inv.setItem(22, createItem(Material.BEACON, "&e&lAvvia votazione", "&7Forza l'avvio di una votazione"));
 
         // Setup Guide Book
-        inv.setItem(8, createItem(Material.BOOK, "&b&lSetup Guide", "&7Get the instruction book"));
+        inv.setItem(8, createItem(Material.BOOK, "&b&lGuida configurazione", "&7Ricevi il libro di istruzioni"));
 
-        inv.setItem(26, createItem(Material.ARROW, "&cBack", "&7Return to Main Menu"));
+        inv.setItem(26, createItem(Material.ARROW, "&cIndietro", "&7Torna al menu principale"));
         fillGlass(inv);
         p.openInventory(inv);
     }
 
     public void openRaceTypeSelector(Player p, String arenaName) {
         Inventory inv = Bukkit.createInventory(null, 27,
-                Component.text("Select Type: " + arenaName, NamedTextColor.BLUE));
-        ItemStack defaultType = createItem(Material.ICE, "&b&lPoint-to-Point", "&7Classic race from Start to Finish.",
-                "&7No Laps.");
+                Component.text("Scegli tipo: " + arenaName, NamedTextColor.BLUE));
+        ItemStack defaultType = createItem(Material.ICE, "&b&lDa punto a punto", "&7Gara classica dalla partenza all'arrivo.",
+                "&7Senza giri.");
         ItemMeta dm = defaultType.getItemMeta();
         dm.getPersistentDataContainer().set(arenaKey, PersistentDataType.STRING, arenaName);
         defaultType.setItemMeta(dm);
 
-        ItemStack lapType = createItem(Material.CLOCK, "&e&lLap Race", "&7Multi-lap circuit.",
-                "&7Start/Finish lines are the same.");
+        ItemStack lapType = createItem(Material.CLOCK, "&e&lGara a giri", "&7Circuito su più giri.",
+                "&7Partenza e arrivo coincidono.");
         ItemMeta lm = lapType.getItemMeta();
         lm.getPersistentDataContainer().set(arenaKey, PersistentDataType.STRING, arenaName);
         lapType.setItemMeta(lm);
@@ -213,29 +242,29 @@ public class GUIManager implements Listener {
 
     public void openArenaSelector(Player p, boolean adminMode) {
         int size = 54;
-        String title = adminMode ? "Edit Arena" : "Select Arena";
+        String title = adminMode ? "Modifica arena" : "Scegli arena";
         Inventory inv = Bukkit.createInventory(null, size, Component.text(title, NamedTextColor.DARK_GRAY));
         for (RaceArena arena : plugin.getArenas().values()) {
-            String status = (arena.getState() == RaceState.LOBBY) ? "&aOPEN" : "&cRUNNING";
+            String status = (arena.getState() == RaceState.LOBBY) ? "&aAPERTA" : "&cIN CORSO";
 
             List<String> lore = new ArrayList<>();
-            lore.add("&7Status: " + status);
-            lore.add("&7Type: &f" + arena.getType());
-            lore.add("&7Laps: &f" + arena.getTotalLaps());
+            lore.add("&7Stato: " + status);
+            lore.add("&7Tipo: &f" + arena.getType());
+            lore.add("&7Giri: &f" + arena.getTotalLaps());
 
             if (adminMode) {
-                lore.add("&eClick to Edit");
+                lore.add("&eClicca per modificare");
             } else {
                 if (arena.getState() == RaceState.LOBBY) {
                     // Check if lobby has players
                     if (arena.getPlayerCount() > 0) {
-                        lore.add("&eLeft-Click to Join Match &7(" + arena.getPlayerCount() + " waiting)");
+                        lore.add("&eClick sinistro per entrare &7(" + arena.getPlayerCount() + " in attesa)");
                     } else {
-                        lore.add("&eLeft-Click to Join");
-                        lore.add("&dShift-Click for Time Trial");
+                        lore.add("&eClick sinistro per entrare");
+                        lore.add("&dShift-Click per la prova a tempo");
                     }
                 } else {
-                    lore.add("&bClick to Spectate");
+                    lore.add("&bClicca per osservare");
                 }
             }
 
@@ -245,43 +274,44 @@ public class GUIManager implements Listener {
             item.setItemMeta(meta);
             inv.addItem(item);
         }
-        inv.setItem(49, createItem(Material.ARROW, "&cBack", "&7Return to Menu"));
+        inv.setItem(49, createItem(Material.ARROW, "&cIndietro", "&7Torna al menu"));
         p.openInventory(inv);
     }
 
     public void openArenaEditor(Player p, RaceArena arena) {
         Inventory inv = Bukkit.createInventory(null, 54,
-                Component.text("Editing: " + arena.getName(), NamedTextColor.BLUE));
+                Component.text("Modifica: " + arena.getName(), NamedTextColor.BLUE));
         boolean isVis = plugin.activeVisualizers.containsKey(p.getUniqueId())
                 && plugin.activeVisualizers.get(p.getUniqueId()).equals(arena.getName());
         inv.setItem(10, createItem(isVis ? Material.ENDER_EYE : Material.ENDER_PEARL,
-                "&b&lVisualizer: " + (isVis ? "&aON" : "&cOFF"), "&7Toggle particle preview"));
+                "&b&lVisualizzatore: " + (isVis ? "&aATTIVO" : "&cDISATTIVO"),
+                "&7Attiva o disattiva l'anteprima"));
 
         EditMode currentMode = plugin.editorMode.getOrDefault(p.getUniqueId(), EditMode.SPAWN);
-        inv.setItem(12, createItem(Material.BLAZE_POWDER, "&6&lWand Mode",
-                "&7Current: " + currentMode.color + currentMode.displayName, "&eClick to cycle mode"));
+        inv.setItem(12, createItem(Material.BLAZE_POWDER, "&6&lModalità bacchetta",
+                "&7Attuale: " + currentMode.color + currentMode.displayName, "&eClicca per cambiare modalità"));
 
         boolean ready = arena.isSetupComplete();
         inv.setItem(13, createItem(ready ? Material.EMERALD : Material.REDSTONE_BLOCK,
-                ready ? "&a&lSetup Progress: READY" : "&c&lSetup Progress: INCOMPLETE",
-                "&7Click to open setup checklist"));
+                ready ? "&a&lConfigurazione: PRONTA" : "&c&lConfigurazione: INCOMPLETA",
+                "&7Clicca per aprire la lista di controllo"));
 
-        inv.setItem(14, createItem(Material.CLOCK, "&e&lLaps: &f" + arena.getTotalLaps(), "&aLeft-Click: +1",
-                "&cRight-Click: -1"));
-        inv.setItem(16, createItem(Material.PLAYER_HEAD, "&e&lMin Players: &f" + arena.minPlayers, "&aLeft-Click: +1",
-                "&cRight-Click: -1"));
+        inv.setItem(14, createItem(Material.CLOCK, "&e&lGiri: &f" + arena.getTotalLaps(), "&aClick sinistro: +1",
+                "&cClick destro: -1"));
+        inv.setItem(16, createItem(Material.PLAYER_HEAD, "&e&lGiocatori minimi: &f" + arena.minPlayers,
+                "&aClick sinistro: +1", "&cClick destro: -1"));
 
-        inv.setItem(28, createItem(Material.COMPASS, "&aTeleport to Lobby", ""));
-        inv.setItem(29, createItem(Material.BEACON, "&aTeleport to Start", ""));
-        inv.setItem(30, createItem(Material.ARMOR_STAND, "&d&lSet Leaderboard", "&7Sets hologram at your feet"));
-        inv.setItem(31, createItem(Material.REPEATER, "&aAuto-Start Delay: " + arena.autoStartDelay + "s",
-                "&eClick to add 10s"));
+        inv.setItem(28, createItem(Material.COMPASS, "&aTeletrasportati alla lobby", ""));
+        inv.setItem(29, createItem(Material.BEACON, "&aTeletrasportati alla partenza", ""));
+        inv.setItem(30, createItem(Material.ARMOR_STAND, "&d&lImposta classifica", "&7Posiziona l'ologramma ai tuoi piedi"));
+        inv.setItem(31, createItem(Material.REPEATER, "&aRitardo avvio automatico: " + arena.autoStartDelay + "s",
+                "&eClicca per aggiungere 10s"));
 
-        inv.setItem(32, createItem(Material.LEVER, "&a&lForce Start", "&7Start race immediately"));
+        inv.setItem(32, createItem(Material.LEVER, "&a&lForza avvio", "&7Avvia subito la gara"));
 
-        inv.setItem(33, createItem(Material.BLAZE_ROD, "&6Get Wand", "&7Equip the tool"));
-        inv.setItem(34, createItem(Material.TNT, "&c&lDelete Arena", "&7Shift-Click to confirm"));
-        inv.setItem(49, createItem(Material.ARROW, "&cBack to List", ""));
+        inv.setItem(33, createItem(Material.BLAZE_ROD, "&6Ottieni bacchetta", "&7Equipaggia lo strumento"));
+        inv.setItem(34, createItem(Material.TNT, "&c&lElimina arena", "&7Shift-Click per confermare"));
+        inv.setItem(49, createItem(Material.ARROW, "&cTorna all'elenco", ""));
 
         fillGlass(inv);
         p.openInventory(inv);
@@ -290,21 +320,21 @@ public class GUIManager implements Listener {
 
     public void openArenaSetupStatusMenu(Player p, RaceArena arena) {
         Inventory inv = Bukkit.createInventory(null, 36,
-                Component.text("Setup Progress: " + arena.getName(), NamedTextColor.DARK_AQUA));
+                Component.text("Configurazione: " + arena.getName(), NamedTextColor.DARK_AQUA));
 
         List<String> statusLines = arena.getSetupStatus();
         Material icon = arena.isSetupComplete() ? Material.EMERALD_BLOCK : Material.REDSTONE_BLOCK;
-        String statusTitle = arena.isSetupComplete() ? "&a&lARENA READY FOR RACING" : "&c&lARENA INCOMPLETE";
+        String statusTitle = arena.isSetupComplete() ? "&a&lARENA PRONTA PER LE GARE" : "&c&lARENA INCOMPLETA";
 
         inv.setItem(13, createItem(icon, statusTitle, statusLines.toArray(new String[0])));
 
         // Direct Quick Actions
-        inv.setItem(19, createItem(Material.OAK_DOOR, "&aSet Pre-Race Lobby", "&7Click to set lobby at your feet"));
-        inv.setItem(21, createItem(Material.LIGHT_WEIGHTED_PRESSURE_PLATE, "&aSet Finish Line", "&7Equip wand to set finish box"));
-        inv.setItem(23, createItem(Material.TARGET, "&aSet Checkpoints", "&7Equip wand to set checkpoints"));
-        inv.setItem(25, createItem(Material.ARMOR_STAND, "&dSet Leaderboard", "&7Sets hologram at your feet"));
+        inv.setItem(19, createItem(Material.OAK_DOOR, "&aImposta lobby pre-gara", "&7Clicca per impostarla ai tuoi piedi"));
+        inv.setItem(21, createItem(Material.LIGHT_WEIGHTED_PRESSURE_PLATE, "&aImposta traguardo", "&7Equipaggia la bacchetta per definire l'area"));
+        inv.setItem(23, createItem(Material.TARGET, "&aImposta checkpoint", "&7Equipaggia la bacchetta per impostarli"));
+        inv.setItem(25, createItem(Material.ARMOR_STAND, "&dImposta classifica", "&7Posiziona l'ologramma ai tuoi piedi"));
 
-        inv.setItem(31, createItem(Material.ARROW, "&cBack to Editor", ""));
+        inv.setItem(31, createItem(Material.ARROW, "&cTorna all'editor", ""));
         fillGlass(inv);
         p.openInventory(inv);
     }
@@ -317,24 +347,24 @@ public class GUIManager implements Listener {
         // Convert components to legacy strings for compatibility with BookMeta
         // setTitle/setAuthor
         meta.setTitle(LegacyComponentSerializer.legacySection()
-                .serialize(Component.text("Arena Setup Guide", NamedTextColor.AQUA)));
+                .serialize(Component.text("Guida configurazione arena", NamedTextColor.AQUA)));
         meta.setAuthor(LegacyComponentSerializer.legacySection()
                 .serialize(Component.text("IceBoatRacing", NamedTextColor.YELLOW)));
 
-        Component p1 = Component.text("§lArena Setup Guide\n\n")
-                .append(Component.text("1. Use the §lRace Wand§r\n   (/race admin wand)\n\n"))
+        Component p1 = Component.text("§lGuida configurazione\n\n")
+                .append(Component.text("1. Usa la §lBacchetta gara§r\n   (/race admin wand)\n\n"))
                 .append(Component.text(
-                        "2. §lShift-Right Click§r\n   to cycle modes:\n   - Spawn\n   - Checkpoint\n   - Finish Line\n   - Lobby\n\n"));
+                        "2. §lShift + click destro§r\n   per cambiare modalità:\n   - Partenza\n   - Checkpoint\n   - Traguardo\n   - Lobby\n\n"));
 
-        Component p2 = Component.text("§lKey Steps:\n\n")
-                .append(Component.text("1. Place §aSpawns§r where boats start.\n\n"))
-                .append(Component.text("2. Place §cCheckpoints§r along the track.\n\n"))
-                .append(Component.text("3. Set §bFinish Line§r (2 points to make a box).\n"));
+        Component p2 = Component.text("§lPassaggi principali:\n\n")
+                .append(Component.text("1. Posiziona le §aPartenze§r delle barche.\n\n"))
+                .append(Component.text("2. Posiziona i §cCheckpoint§r lungo la pista.\n\n"))
+                .append(Component.text("3. Imposta il §bTraguardo§r con due punti.\n"));
 
-        Component p3 = Component.text("§lFinalizing:\n\n")
-                .append(Component.text("4. Set §6Lobby§r (waiting area).\n\n"))
-                .append(Component.text("5. Click 'Visualizer' in GUI to see your nodes.\n\n"))
-                .append(Component.text("6. Adjust Laps/Players in the GUI."));
+        Component p3 = Component.text("§lCompletamento:\n\n")
+                .append(Component.text("4. Imposta la §6Lobby§r di attesa.\n\n"))
+                .append(Component.text("5. Attiva il visualizzatore per vedere i punti.\n\n"))
+                .append(Component.text("6. Regola giri e giocatori nel menu."));
 
         meta.addPages(p1, p2, p3);
         book.setItemMeta(meta);
@@ -345,7 +375,7 @@ public class GUIManager implements Listener {
             p.getWorld().dropItem(p.getLocation(), book);
         }
         p.playSound(p.getLocation(), Sound.ENTITY_ITEM_PICKUP, 1f, 1f);
-        p.sendMessage(Component.text("You received the Setup Guide!", NamedTextColor.GREEN));
+        p.sendMessage(Component.text("Hai ricevuto la guida alla configurazione!", NamedTextColor.GREEN));
     }
 
     // --- EVENT HANDLING ---
@@ -357,10 +387,11 @@ public class GUIManager implements Listener {
         Component titleComp = e.getView().title();
         String title = LegacyComponentSerializer.legacyAmpersand().serialize(titleComp);
 
-        if (!title.contains("IceBoat") && !title.contains("Select Arena") && !title.contains("Edit Arena")
-                && !title.contains("Editing:") && !title.contains("Select Cage") && !title.contains("Select Type")
-                && !title.contains("Cosmetics Hub") && !title.contains("Select Particle")
-                && !title.contains("Vote for Map") && !title.contains("Setup Progress:"))
+        if (!title.contains("IceBoat") && !title.contains("Scegli arena") && !title.contains("Modifica arena")
+                && !title.contains("Modifica:") && !title.contains("Scegli colore") && !title.contains("Scegli tipo")
+                && !title.contains("Menu cosmetici") && !title.contains("Scegli scia")
+                && !title.contains("Vota la mappa") && !title.contains("Configurazione:")
+                && !title.contains("Segui un pilota"))
             return;
 
         e.setCancelled(true);
@@ -368,6 +399,24 @@ public class GUIManager implements Listener {
         if (clicked == null || clicked.getType() == Material.AIR
                 || clicked.getType() == Material.GRAY_STAINED_GLASS_PANE)
             return;
+
+        if (title.contains("Segui un pilota")) {
+            if (clicked.hasItemMeta() && clicked.getItemMeta().getPersistentDataContainer()
+                    .has(spectatorTargetKey, PersistentDataType.STRING)) {
+                String uuidText = clicked.getItemMeta().getPersistentDataContainer()
+                        .get(spectatorTargetKey, PersistentDataType.STRING);
+                try {
+                    Player target = Bukkit.getPlayer(UUID.fromString(uuidText));
+                    RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+                    if (target != null && arena != null && arena.isSpectator(p.getUniqueId())) {
+                        arena.startFirstPersonSpectating(p, target);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                }
+                p.closeInventory();
+            }
+            return;
+        }
 
         // Main Menu
         if (title.contains("IceBoat Racing")) {
@@ -383,7 +432,7 @@ public class GUIManager implements Listener {
         }
 
         // Vote Menu
-        if (title.contains("Vote for Map")) {
+        if (title.contains("Vota la mappa")) {
             if (clicked.hasItemMeta()
                     && clicked.getItemMeta().getPersistentDataContainer().has(arenaKey, PersistentDataType.STRING)) {
                 String arenaName = clicked.getItemMeta().getPersistentDataContainer().get(arenaKey,
@@ -395,7 +444,7 @@ public class GUIManager implements Listener {
         }
 
         // Cosmetics Hub
-        if (title.contains("Cosmetics Hub")) {
+        if (title.contains("Menu cosmetici")) {
             if (clicked.getType() == Material.ARROW) {
                 openMainMenu(p);
                 return;
@@ -408,7 +457,7 @@ public class GUIManager implements Listener {
         }
 
         // Cosmetics: Cage
-        if (title.contains("Select Cage Color")) {
+        if (title.contains("Scegli colore gabbia")) {
             if (clicked.getType() == Material.ARROW) {
                 openCosmeticsHub(p);
                 return;
@@ -416,7 +465,7 @@ public class GUIManager implements Listener {
             Material blockMat = convertPaneToBlock(clicked.getType());
             if (blockMat != null) {
                 plugin.setPlayerCagePreference(p.getUniqueId(), blockMat);
-                p.sendMessage(Component.text("Cage color set!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Colore della gabbia impostato!", NamedTextColor.GREEN));
                 p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
                 p.closeInventory();
             }
@@ -424,7 +473,7 @@ public class GUIManager implements Listener {
         }
 
         // Cosmetics: Trail
-        if (title.contains("Select Particle")) {
+        if (title.contains("Scegli scia")) {
             if (clicked.getType() == Material.ARROW) {
                 openCosmeticsHub(p);
                 return;
@@ -436,12 +485,12 @@ public class GUIManager implements Listener {
                 try {
                     TrailType trail = TrailType.valueOf(trailName);
                     if (trail.permission != null && !p.hasPermission(trail.permission)) {
-                        p.sendMessage(Component.text("You don't have permission for this trail.", NamedTextColor.RED));
+                        p.sendMessage(Component.text("Non hai il permesso per usare questa scia.", NamedTextColor.RED));
                         p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_LAND, 0.5f, 1f);
                         return;
                     }
                     plugin.setPlayerTrailPreference(p.getUniqueId(), trail);
-                    p.sendMessage(Component.text("Trail set to " + trail.displayName, NamedTextColor.GREEN));
+                    p.sendMessage(Component.text("Scia impostata: " + trail.displayName, NamedTextColor.GREEN));
                     p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
                     openTrailMenu(p);
                 } catch (IllegalArgumentException ignored) {
@@ -451,7 +500,7 @@ public class GUIManager implements Listener {
         }
 
         // Admin Panel
-        if (title.contains("Admin Panel")) {
+        if (title.contains("Pannello amministratore")) {
             if (clicked.getType() == Material.ARROW) {
                 openMainMenu(p);
                 return;
@@ -460,8 +509,8 @@ public class GUIManager implements Listener {
                 p.closeInventory();
                 plugin.inputMode.put(p.getUniqueId(), "create_arena");
                 p.sendMessage(Component.text("---------------------------------------", NamedTextColor.GREEN));
-                p.sendMessage(Component.text("Please type the name of the new arena in chat.", NamedTextColor.YELLOW));
-                p.sendMessage(Component.text("Type 'cancel' to abort.", NamedTextColor.GRAY));
+                p.sendMessage(Component.text("Scrivi in chat il nome della nuova arena.", NamedTextColor.YELLOW));
+                p.sendMessage(Component.text("Scrivi 'annulla' per interrompere.", NamedTextColor.GRAY));
                 p.sendMessage(Component.text("---------------------------------------", NamedTextColor.GREEN));
             } else if (clicked.getType() == Material.CHEST_MINECART)
                 openArenaSelector(p, true);
@@ -470,7 +519,7 @@ public class GUIManager implements Listener {
                 p.closeInventory();
             } else if (clicked.getType() == Material.REDSTONE_TORCH) {
                 plugin.reload();
-                p.sendMessage(Component.text("Plugin reloaded!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Plugin ricaricato!", NamedTextColor.GREEN));
                 p.closeInventory();
             } else if (clicked.getType() == Material.BEACON) {
                 p.performCommand("race admin startvote");
@@ -483,7 +532,7 @@ public class GUIManager implements Listener {
         }
 
         // Race Type Selector
-        if (title.contains("Select Type:")) {
+        if (title.contains("Scegli tipo:")) {
             if (clicked.hasItemMeta()
                     && clicked.getItemMeta().getPersistentDataContainer().has(arenaKey, PersistentDataType.STRING)) {
                 String arenaName = clicked.getItemMeta().getPersistentDataContainer().get(arenaKey,
@@ -507,9 +556,9 @@ public class GUIManager implements Listener {
         }
 
         // Arena Selector
-        if (title.contains("Select Arena") || title.contains("Edit Arena")) {
+        if (title.contains("Scegli arena") || title.contains("Modifica arena")) {
             if (clicked.getType() == Material.ARROW) {
-                if (title.contains("Edit"))
+                if (title.contains("Modifica"))
                     openAdminPanel(p);
                 else
                     openMainMenu(p);
@@ -522,7 +571,7 @@ public class GUIManager implements Listener {
                         PersistentDataType.STRING);
 
                 // Logic: Handle Shift-Click (Time Trial) vs Left-Click (Join/Spectate)
-                if (title.contains("Edit Arena")) {
+                if (title.contains("Modifica arena")) {
                     RaceArena arena = plugin.getArena(arenaName);
                     if (arena != null)
                         openArenaEditor(p, arena);
@@ -534,7 +583,7 @@ public class GUIManager implements Listener {
                         // Time Trial Request
                         if (arena != null) {
                             if (arena.getState() != RaceState.LOBBY) {
-                                p.sendMessage(Component.text("Cannot start Time Trial while race is active.",
+                                p.sendMessage(Component.text("Non puoi avviare una prova a tempo durante una gara.",
                                         NamedTextColor.RED));
                                 p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
                             } else {
@@ -557,7 +606,7 @@ public class GUIManager implements Listener {
         }
 
         // Arena Editor
-        if (title.contains("Editing:")) {
+        if (title.contains("Modifica:")) {
             String arenaName = plugin.editorArena.get(p.getUniqueId());
             if (arenaName == null) {
                 p.closeInventory();
@@ -598,7 +647,7 @@ public class GUIManager implements Listener {
             } else if (clicked.getType() == Material.ARMOR_STAND) {
                 arena.setLeaderboardLocation(p.getLocation().add(0, 1.5, 0));
                 plugin.saveArenas();
-                p.sendMessage(Component.text("Leaderboard updated.", NamedTextColor.LIGHT_PURPLE));
+                p.sendMessage(Component.text("Classifica aggiornata.", NamedTextColor.LIGHT_PURPLE));
             } else if (clicked.getType() == Material.REPEATER) {
                 arena.autoStartDelay += 10;
                 if (arena.autoStartDelay > 60)
@@ -616,7 +665,7 @@ public class GUIManager implements Listener {
                     p.performCommand("race admin delete " + arenaName);
                     p.closeInventory();
                 } else {
-                    p.sendMessage(Component.text("Shift-Click TNT to delete this arena.", NamedTextColor.RED));
+                    p.sendMessage(Component.text("Usa Shift-Click sulla TNT per eliminare l'arena.", NamedTextColor.RED));
                 }
             } else if (clicked.getType() == Material.ARROW) {
                 openArenaSelector(p, true);
@@ -625,7 +674,7 @@ public class GUIManager implements Listener {
         }
 
         // Setup Progress Checklist Menu
-        if (title.contains("Setup Progress:")) {
+        if (title.contains("Configurazione:")) {
             String arenaName = plugin.editorArena.get(p.getUniqueId());
             if (arenaName == null) {
                 p.closeInventory();
@@ -640,24 +689,24 @@ public class GUIManager implements Listener {
             if (clicked.getType() == Material.OAK_DOOR) {
                 arena.setLobby(p.getLocation());
                 plugin.saveArenas();
-                p.sendMessage(Component.text("Pre-Race Lobby set at your location!", NamedTextColor.GREEN));
+                p.sendMessage(Component.text("Lobby pre-gara impostata nella tua posizione!", NamedTextColor.GREEN));
                 p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
                 openArenaSetupStatusMenu(p, arena);
             } else if (clicked.getType() == Material.ARMOR_STAND) {
                 arena.setLeaderboardLocation(p.getLocation().add(0, 1.5, 0));
                 plugin.saveArenas();
-                p.sendMessage(Component.text("Leaderboard hologram position set!", NamedTextColor.LIGHT_PURPLE));
+                p.sendMessage(Component.text("Posizione dell'ologramma della classifica impostata!", NamedTextColor.LIGHT_PURPLE));
                 p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
                 openArenaSetupStatusMenu(p, arena);
             } else if (clicked.getType() == Material.LIGHT_WEIGHTED_PRESSURE_PLATE) {
                 plugin.editorMode.put(p.getUniqueId(), EditMode.FINISH_1);
                 p.performCommand("race admin wand");
-                p.sendMessage(Component.text("Wand mode set to FINISH. Left-Click & Right-Click blocks with wand.", NamedTextColor.YELLOW));
+                p.sendMessage(Component.text("Bacchetta impostata su TRAGUARDO. Clicca i blocchi con i due tasti.", NamedTextColor.YELLOW));
                 p.closeInventory();
             } else if (clicked.getType() == Material.TARGET) {
                 plugin.editorMode.put(p.getUniqueId(), EditMode.CHECKPOINT);
                 p.performCommand("race admin wand");
-                p.sendMessage(Component.text("Wand mode set to CHECKPOINT. Left-Click blocks with wand.", NamedTextColor.YELLOW));
+                p.sendMessage(Component.text("Bacchetta impostata su CHECKPOINT. Usa il click sinistro sui blocchi.", NamedTextColor.YELLOW));
                 p.closeInventory();
             } else if (clicked.getType() == Material.ARROW) {
                 openArenaEditor(p, arena);
@@ -684,7 +733,7 @@ public class GUIManager implements Listener {
     }
 
     private ItemStack createCosmeticItem(Material mat, String name) {
-        return createItem(mat, name, "&7Click to select");
+        return createItem(mat, name, "&7Clicca per selezionare");
     }
 
     private Material convertPaneToBlock(Material pane) {

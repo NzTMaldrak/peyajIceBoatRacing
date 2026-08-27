@@ -130,12 +130,7 @@ public class Utils {
 
     public static Boat spawnRandomBoat(Location loc) {
         org.bukkit.entity.EntityType selectedType = BOAT_TYPES[ThreadLocalRandom.current().nextInt(BOAT_TYPES.length)];
-        Boat boat = (Boat) loc.getWorld().spawnEntity(loc, selectedType);
-        try {
-            boat.getClass().getMethod("setStepHeight", float.class).invoke(boat, 1.25f);
-        } catch (Throwable ignored) {
-        }
-        return boat;
+        return (Boat) loc.getWorld().spawnEntity(loc, selectedType);
     }
 
     public static boolean isIceBlock(org.bukkit.Material mat) {
