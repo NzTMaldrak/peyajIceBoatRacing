@@ -7,6 +7,10 @@ not-in-race: "&cNon sei in una gara."
 
 # Messaggi dell'arena
 arena-joined: "&aSei entrato nell'arena &f{arena}"
+arena-full: "&cQuesta gara è piena ({max} giocatori)."
+ready-enabled: "&aSei pronto!"
+ready-disabled: "&eNon sei più pronto."
+cannot-race-vanished: "&cDisattiva il vanish prima di entrare in una gara o come spettatore."
 arena-spectating: "&bOra stai osservando &f{arena}"
 arena-left: "&eHai abbandonato la gara."
 spectator-left: "&eSei uscito dalla modalità spettatore."

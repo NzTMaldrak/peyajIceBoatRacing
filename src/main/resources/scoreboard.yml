@@ -1,0 +1,42 @@
+# Tutti i colori legacy con & sono supportati.
+# Placeholder lobby: {arena}, {players}, {min_players}, {max_players},
+#                    {ready}, {countdown}, {status}
+# Placeholder gara:  {stats}, {ranking_1} ... {ranking_10}
+
+lobby:
+  title: "&b&lVoxelKart"
+  lines:
+    - "&7--------------------"
+    - "&eArena: &f{arena}"
+    - "&eGiocatori: &f{players}/{max_players}"
+    - "&eMinimo: &f{min_players}"
+    - "&ePronti: &f{ready}/{players}"
+    - "&eStato: &f{status}"
+    - "&7--------------------"
+  status:
+    waiting-players: "In attesa di giocatori..."
+    waiting-ready: "In attesa dei pronti..."
+    countdown: "Inizio tra {countdown}s"
+
+race:
+  title: "&b&lVoxelKart"
+  lines:
+    - "&7--------------------"
+    - "&eStatistiche:"
+    - "{stats}"
+    - ""
+    - "&e&lCLASSIFICA"
+    - "{ranking_1}"
+    - "{ranking_2}"
+    - "{ranking_3}"
+    - "{ranking_4}"
+    - "{ranking_5}"
+    - "{ranking_6}"
+    - "{ranking_7}"
+    - "{ranking_8}"
+    - "{ranking_9}"
+    - "{ranking_10}"
+  spectator-stats: "&bSPETTATORE"
+  stats-format: "&f{time} &7| &b{speed} km/h &7| &aCP: {checkpoint}/{checkpoints}"
+  lap-format: " &7| &6G{lap}/{laps}"
+  empty-ranking: "&7---"

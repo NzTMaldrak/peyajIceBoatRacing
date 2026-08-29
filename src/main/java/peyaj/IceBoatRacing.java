@@ -71,6 +71,8 @@ public class IceBoatRacing extends JavaPlugin {
     private FileConfiguration statsConfig;
     private File arenasFile;
     private FileConfiguration arenasConfig;
+    private File scoreboardFile;
+    private FileConfiguration scoreboardConfig;
 
     // --- MANAGERS ---
     public GUIManager guiManager;
@@ -112,6 +114,7 @@ public class IceBoatRacing extends JavaPlugin {
         checkConfigUpdates();
         loadConfigSettings();
         loadMessages();
+        loadScoreboard();
         loadStats();
 
         // Load Arenas from dedicated file
@@ -218,7 +221,10 @@ public class IceBoatRacing extends JavaPlugin {
         reloadConfig();
         loadConfigSettings();
         loadMessages();
+        loadScoreboard();
         loadArenasConfig();
+        for (RaceArena arena : arenas.values())
+            arena.refreshLobbyScoreboard();
         getLogger().info("Configuration reloaded.");
     }
 
@@ -378,12 +384,66 @@ public class IceBoatRacing extends JavaPlugin {
                 getLogger().warning("Impossibile migrare messages.yml in italiano: " + e.getMessage());
             }
         }
+        boolean updated = false;
+        if (!messagesConfig.contains("arena-full")) {
+            messagesConfig.set("arena-full", "&cQuesta gara è piena ({max} giocatori).");
+            updated = true;
+        }
+        if (!messagesConfig.contains("ready-enabled")) {
+            messagesConfig.set("ready-enabled", "&aSei pronto!");
+            updated = true;
+        }
+        if (!messagesConfig.contains("ready-disabled")) {
+            messagesConfig.set("ready-disabled", "&eNon sei più pronto.");
+            updated = true;
+        }
+        if (!messagesConfig.contains("cannot-race-vanished")) {
+            messagesConfig.set("cannot-race-vanished",
+                    "&cDisattiva il vanish prima di entrare in una gara o come spettatore.");
+            updated = true;
+        }
+        if (updated) {
+            try {
+                messagesConfig.save(messagesFile);
+            } catch (IOException e) {
+                getLogger().warning("Impossibile aggiornare messages.yml: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadScoreboard() {
+        scoreboardFile = new File(getDataFolder(), "scoreboard.yml");
+        if (!scoreboardFile.exists())
+            saveResource("scoreboard.yml", false);
+        scoreboardConfig = YamlConfiguration.loadConfiguration(scoreboardFile);
+    }
+
+    public String getScoreboardString(String path, String fallback) {
+        return scoreboardConfig == null ? fallback : scoreboardConfig.getString(path, fallback);
+    }
+
+    public List<String> getScoreboardLines(String path, List<String> fallback) {
+        if (scoreboardConfig == null || !scoreboardConfig.isList(path))
+            return fallback;
+        List<String> lines = scoreboardConfig.getStringList(path);
+        return lines.isEmpty() ? fallback : lines;
     }
 
     public Component getMessage(String key) {
         String prefix = messagesConfig.getString("prefix", "&b[IceBoat] ");
         String msg = messagesConfig.getString(key, "&cMissing message: " + key);
-        return LegacyComponentSerializer.legacyAmpersand().deserialize(prefix + msg);
+        return LegacyComponentSerializer.legacyAmpersand().deserialize(normalizeMessagePrefix(prefix) + msg);
+    }
+
+    private String normalizeMessagePrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty())
+            return "";
+        // Ignore trailing legacy formatting codes when checking whether the visible
+        // prefix already contains a separator (for example "VoxelKart &r").
+        String visibleEnd = prefix.replaceFirst("(?i)(?:&[0-9A-FK-OR])+$", "");
+        return !visibleEnd.isEmpty() && Character.isWhitespace(visibleEnd.charAt(visibleEnd.length() - 1))
+                ? prefix
+                : prefix + " ";
     }
 
     public String getRawMessage(String key) {
@@ -469,6 +529,22 @@ public class IceBoatRacing extends JavaPlugin {
             antiCheatHook.exempt(player);
     }
 
+    public boolean isPlayerVanished(Player player) {
+        if (player == null)
+            return false;
+        if (player.isInvisible())
+            return true;
+        for (org.bukkit.metadata.MetadataValue value : player.getMetadata("vanished")) {
+            if (value.asBoolean())
+                return true;
+        }
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.getUniqueId().equals(player.getUniqueId()) && !viewer.canSee(player))
+                return true;
+        }
+        return false;
+    }
+
     public void removePlayerFromArenaMap(UUID uuid) {
         playerArenaMap.remove(uuid);
         Player player = Bukkit.getPlayer(uuid);
@@ -525,8 +601,8 @@ public class IceBoatRacing extends JavaPlugin {
     private boolean isIceBoatScoreboard(Scoreboard scoreboard) {
         if (scoreboard == null)
             return false;
-        boolean raceBoard = scoreboard.getObjective("IceRace") != null && scoreboard.getTeam("stats") != null;
-        boolean lobbyBoard = scoreboard.getObjective("Lobby") != null && scoreboard.getTeam("status") != null;
+        boolean raceBoard = scoreboard.getObjective("IceRace") != null;
+        boolean lobbyBoard = scoreboard.getObjective("Lobby") != null;
         if (raceBoard || lobbyBoard)
             return true;
 
@@ -577,6 +653,7 @@ public class IceBoatRacing extends JavaPlugin {
             arenasConfig.set(path + ".type", arena.getType().name());
             arenasConfig.set(path + ".laps", arena.getTotalLaps());
             arenasConfig.set(path + ".min-players", arena.minPlayers);
+            arenasConfig.set(path + ".max-players", arena.maxPlayers);
             arenasConfig.set(path + ".auto-start-delay", arena.autoStartDelay);
             arenasConfig.set(path + ".void-y", arena.voidY);
             arenasConfig.set(path + ".lobby", arena.getLobby());
@@ -648,7 +725,9 @@ public class IceBoatRacing extends JavaPlugin {
             }
 
             arena.setTotalLaps(arenasConfig.getInt(path + ".laps", 1));
-            arena.minPlayers = arenasConfig.getInt(path + ".min-players", 2);
+            arena.minPlayers = Math.min(25, Math.max(1, arenasConfig.getInt(path + ".min-players", 2)));
+            arena.maxPlayers = Math.min(25,
+                    Math.max(arena.minPlayers, arenasConfig.getInt(path + ".max-players", 25)));
             arena.autoStartDelay = arenasConfig.getInt(path + ".auto-start-delay", 30);
             arena.voidY = arenasConfig.getInt(path + ".void-y", -64);
 

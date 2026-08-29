@@ -248,6 +248,16 @@ public class RaceListener implements Listener {
             return;
         }
 
+        if (item.getItemMeta().getPersistentDataContainer().has(plugin.guiManager.readyKey,
+                PersistentDataType.BYTE) && e.getAction().name().contains("RIGHT")) {
+            RaceArena arena = plugin.getPlayerArena(p.getUniqueId());
+            if (arena != null) {
+                e.setCancelled(true);
+                arena.toggleReady(p);
+            }
+            return;
+        }
+
         // Check for reset run item
         if (item.getType() == Material.RED_DYE) {
             String displayName = item.getItemMeta().displayName() != null

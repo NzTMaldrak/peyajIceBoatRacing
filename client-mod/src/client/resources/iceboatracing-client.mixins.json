@@ -4,7 +4,6 @@
   "package": "peyaj.iceboatracing.client.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "AbstractBoatMixin",
     "EntityMixin"
   ],
   "injectors": {

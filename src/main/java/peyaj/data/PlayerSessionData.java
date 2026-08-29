@@ -20,7 +20,6 @@ public final class PlayerSessionData {
     private final boolean flying;
     private final boolean invulnerable;
     private final boolean collidable;
-    private final boolean invisible;
     private final boolean canPickupItems;
 
     public PlayerSessionData(Player player) {
@@ -34,7 +33,6 @@ public final class PlayerSessionData {
         this.flying = player.isFlying();
         this.invulnerable = player.isInvulnerable();
         this.collidable = player.isCollidable();
-        this.invisible = player.isInvisible();
         this.canPickupItems = player.getCanPickupItems();
     }
 
@@ -50,7 +48,8 @@ public final class PlayerSessionData {
         player.setFlying(flying && (allowFlight || gameMode == GameMode.CREATIVE || gameMode == GameMode.SPECTATOR));
         player.setInvulnerable(invulnerable);
         player.setCollidable(collidable);
-        player.setInvisible(invisible);
+        // Visibility is owned by vanish plugins. IceBoatRacing never persists or
+        // restores this flag, otherwise a race can overwrite a later /vanish state.
         player.setCanPickupItems(canPickupItems);
         player.setScoreboard(scoreboard);
         player.updateInventory();

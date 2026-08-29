@@ -37,6 +37,7 @@ public class GUIManager implements Listener {
     private final NamespacedKey trailKey;
     private final NamespacedKey spectatorTargetKey;
     public final NamespacedKey raceWandKey;
+    public final NamespacedKey readyKey;
 
     public GUIManager(IceBoatRacing plugin) {
         this.plugin = plugin;
@@ -44,6 +45,7 @@ public class GUIManager implements Listener {
         this.trailKey = new NamespacedKey(plugin, "trail_key");
         this.spectatorTargetKey = new NamespacedKey(plugin, "spectator_target");
         this.raceWandKey = new NamespacedKey(plugin, "race_wand");
+        this.readyKey = new NamespacedKey(plugin, "ready_button");
     }
 
     public void openMainMenu(Player p) {
@@ -251,6 +253,7 @@ public class GUIManager implements Listener {
             lore.add("&7Stato: " + status);
             lore.add("&7Tipo: &f" + arena.getType());
             lore.add("&7Giri: &f" + arena.getTotalLaps());
+            lore.add("&7Giocatori: &f" + arena.getPlayerCount() + "/" + arena.maxPlayers);
 
             if (adminMode) {
                 lore.add("&eClicca per modificare");
@@ -299,6 +302,8 @@ public class GUIManager implements Listener {
         inv.setItem(14, createItem(Material.CLOCK, "&e&lGiri: &f" + arena.getTotalLaps(), "&aClick sinistro: +1",
                 "&cClick destro: -1"));
         inv.setItem(16, createItem(Material.PLAYER_HEAD, "&e&lGiocatori minimi: &f" + arena.minPlayers,
+                "&aClick sinistro: +1", "&cClick destro: -1"));
+        inv.setItem(15, createItem(Material.CHEST, "&e&lGiocatori massimi: &f" + arena.maxPlayers,
                 "&aClick sinistro: +1", "&cClick destro: -1"));
 
         inv.setItem(28, createItem(Material.COMPASS, "&aTeletrasportati alla lobby", ""));
@@ -635,7 +640,12 @@ public class GUIManager implements Listener {
                 openArenaEditor(p, arena);
             } else if (clicked.getType() == Material.PLAYER_HEAD) {
                 int change = e.isLeftClick() ? 1 : -1;
-                arena.minPlayers = Math.max(1, arena.minPlayers + change);
+                arena.minPlayers = Math.min(arena.maxPlayers, Math.max(1, arena.minPlayers + change));
+                plugin.saveArenas();
+                openArenaEditor(p, arena);
+            } else if (clicked.getType() == Material.CHEST) {
+                int change = e.isLeftClick() ? 1 : -1;
+                arena.maxPlayers = Math.min(25, Math.max(arena.minPlayers, arena.maxPlayers + change));
                 plugin.saveArenas();
                 openArenaEditor(p, arena);
             } else if (clicked.getType() == Material.COMPASS) {

@@ -48,6 +48,7 @@ public class RaceArena {
 
     // Settings
     public int minPlayers = 2;
+    public int maxPlayers = 25;
     public int autoStartDelay = 30;
     public int voidY = -64;
 
@@ -60,6 +61,7 @@ public class RaceArena {
     private final Map<UUID, Boat> playerBoats = new HashMap<>();
     private final Set<UUID> respawningPlayers = new HashSet<>();
     private final Set<UUID> players = new HashSet<>();
+    private final Set<UUID> readyPlayers = new HashSet<>();
     private final Set<UUID> spectators = new HashSet<>();
     private final List<UUID> finishOrder = new ArrayList<>();
     private final Map<UUID, Location> lastLocations = new HashMap<>();
@@ -164,6 +166,10 @@ public class RaceArena {
 
     public int getPlayerCount() {
         return players.size();
+    }
+
+    public int getReadyCount() {
+        return readyPlayers.size();
     }
 
     public boolean isTimeTrial() {
@@ -314,6 +320,10 @@ public class RaceArena {
     }
 
     public void addPlayer(Player p, boolean timeTrial) {
+        if (plugin.isPlayerVanished(p)) {
+            p.sendMessage(plugin.getMessage("cannot-race-vanished"));
+            return;
+        }
         if (state != RaceState.LOBBY && !timeTrial) {
             addSpectator(p);
             return;
@@ -322,9 +332,6 @@ public class RaceArena {
             p.sendMessage(plugin.getMessage("race-already-active"));
             return;
         }
-        if (plugin.raceClientHook == null || !plugin.raceClientHook.canEnterRace(p))
-            return;
-
         if (timeTrial && !players.isEmpty()) {
             p.sendMessage(
                     Component.text("La lobby non è vuota! Entrerai nella gara invece che nella prova a tempo.",
@@ -332,9 +339,18 @@ public class RaceArena {
             timeTrial = false;
         }
 
+        if (!timeTrial && players.size() >= maxPlayers) {
+            p.sendMessage(plugin.getMessage("arena-full").replaceText(
+                    builder -> builder.matchLiteral("{max}").replacement(String.valueOf(maxPlayers))));
+            return;
+        }
+        if (plugin.raceClientHook == null || !plugin.raceClientHook.canEnterRace(p))
+            return;
+
         plugin.capturePlayerState(p);
         p.getInventory().clear();
         players.add(p.getUniqueId());
+        readyPlayers.remove(p.getUniqueId());
         plugin.setPlayerArena(p.getUniqueId(), name);
         if (lobby != null && lobby.getWorld() != null) {
             p.teleport(lobby);
@@ -354,6 +370,10 @@ public class RaceArena {
     }
 
     public void addSpectator(Player p) {
+        if (plugin.isPlayerVanished(p)) {
+            p.sendMessage(plugin.getMessage("cannot-race-vanished"));
+            return;
+        }
         plugin.capturePlayerState(p);
         p.getInventory().clear();
         spectators.add(p.getUniqueId());
@@ -379,7 +399,6 @@ public class RaceArena {
         p.setFlying(true);
         p.setInvulnerable(true);
         p.setCollidable(false);
-        p.setInvisible(true);
         p.setCanPickupItems(false);
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (!viewer.getUniqueId().equals(p.getUniqueId())) {
@@ -452,6 +471,9 @@ public class RaceArena {
     }
 
     private void giveLobbyItems(Player p, boolean isTimeTrial) {
+        if (!isTimeTrial && state == RaceState.LOBBY) {
+            giveReadyItem(p);
+        }
         ItemStack compass = new ItemStack(Material.COMPASS);
         var meta = compass.getItemMeta();
         meta.displayName(Component.text("Menu gara", NamedTextColor.AQUA));
@@ -474,6 +496,37 @@ public class RaceArena {
             reset.setItemMeta(rMeta);
             p.getInventory().setItem(7, reset);
         }
+    }
+
+    private void giveReadyItem(Player p) {
+        boolean ready = readyPlayers.contains(p.getUniqueId());
+        ItemStack button = new ItemStack(ready ? Material.LIME_DYE : Material.GRAY_DYE);
+        var meta = button.getItemMeta();
+        meta.displayName(LegacyComponentSerializer.legacyAmpersand().deserialize(
+                ready ? "&a&lPRONTO" : "&e&lCLICCA: PRONTO"));
+        meta.lore(List.of(LegacyComponentSerializer.legacyAmpersand().deserialize(
+                ready ? "&7Click destro per annullare" : "&7Click destro quando sei pronto")));
+        meta.getPersistentDataContainer().set(plugin.guiManager.readyKey,
+                org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+        button.setItemMeta(meta);
+        p.getInventory().setItem(0, button);
+    }
+
+    public void toggleReady(Player p) {
+        UUID uuid = p.getUniqueId();
+        if (state != RaceState.LOBBY || !players.contains(uuid) || isTimeTrialMode)
+            return;
+        if (readyPlayers.remove(uuid)) {
+            p.sendMessage(plugin.getMessage("ready-disabled"));
+        } else {
+            readyPlayers.add(uuid);
+            p.sendMessage(plugin.getMessage("ready-enabled"));
+        }
+        p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 1f,
+                readyPlayers.contains(uuid) ? 1.4f : 0.8f);
+        giveReadyItem(p);
+        checkAutoStart();
+        updateLobbyScoreboard();
     }
 
     private void giveActiveRaceItems(Player p) {
@@ -541,6 +594,7 @@ public class RaceArena {
             return;
         }
         players.remove(p.getUniqueId());
+        readyPlayers.remove(p.getUniqueId());
         eliminatedPlayers.remove(p.getUniqueId());
         // Remove the arena association before destroying the boat, otherwise the
         // dismount listener can cancel an intentional /race leave.
@@ -598,6 +652,18 @@ public class RaceArena {
     }
 
     public void startRace(boolean isTimeTrialSession) {
+        boolean automaticStart = autoStartTask != null;
+        for (UUID uuid : new HashSet<>(players)) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && plugin.isPlayerVanished(player)) {
+                player.sendMessage(plugin.getMessage("cannot-race-vanished"));
+                removePlayer(player);
+            }
+        }
+        if (players.isEmpty() || (automaticStart && players.size() < minPlayers)) {
+            cancelAutoStart();
+            return;
+        }
         if (spawns.isEmpty())
             return;
         cancelAutoStart();
@@ -788,6 +854,7 @@ public class RaceArena {
             }
         }
         players.clear();
+        readyPlayers.clear();
         for (UUID uuid : spectators) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
@@ -1392,13 +1459,13 @@ public class RaceArena {
     private void checkAutoStart() {
         if (state != RaceState.LOBBY)
             return;
-        if (players.size() >= minPlayers) {
+        if (players.size() >= minPlayers && allPlayersReady()) {
             if (autoStartTask == null) {
                 lobbyCountdown = autoStartDelay;
                 autoStartTask = new BukkitRunnable() {
                     @Override
                     public void run() {
-                        if (state != RaceState.LOBBY || players.size() < minPlayers) {
+                        if (state != RaceState.LOBBY || players.size() < minPlayers || !allPlayersReady()) {
                             cancelAutoStart();
                             return;
                         }
@@ -1428,6 +1495,10 @@ public class RaceArena {
         }
     }
 
+    private boolean allPlayersReady() {
+        return !players.isEmpty() && readyPlayers.containsAll(players);
+    }
+
     private void cancelAutoStart() {
         if (autoStartTask != null) {
             autoStartTask.cancel();
@@ -1450,30 +1521,45 @@ public class RaceArena {
     private void setupLobbyScoreboard(Player p) {
         ScoreboardManager m = Bukkit.getScoreboardManager();
         Scoreboard b = m.getNewScoreboard();
-        Objective o = b.registerNewObjective("Lobby", Criteria.DUMMY, Component.text("§b§lICE BOAT RACING"));
+        Objective o = b.registerNewObjective("Lobby", Criteria.DUMMY,
+                legacy(plugin.getScoreboardString("lobby.title", "&b&lVoxelKart")));
         o.setDisplaySlot(DisplaySlot.SIDEBAR);
         try {
             o.numberFormat(NumberFormat.blank());
         } catch (Throwable ignored) {
         }
-        Team statusTeam = b.registerNewTeam("status");
-        String statusTxt = (autoStartTask != null && lobbyCountdown >= 0) ? "§eInizio: " + lobbyCountdown + "s"
-                : "§fIn attesa...";
-        statusTeam.addEntry("§7");
-        statusTeam.suffix(Component.text(statusTxt));
-        o.getScore("§7--------------------").setScore(6);
-        o.getScore("§eArena: §f" + name).setScore(5);
-        o.getScore("§eGiocatori: §f" + players.size() + "/" + minPlayers).setScore(4);
-        o.getScore("§eStato: ").setScore(3);
-        o.getScore("§7").setScore(2);
-        o.getScore("§7-------------------- ").setScore(1);
+        String status;
+        if (autoStartTask != null && lobbyCountdown >= 0) {
+            status = plugin.getScoreboardString("lobby.status.countdown", "Inizio tra {countdown}s");
+        } else if (players.size() < minPlayers) {
+            status = plugin.getScoreboardString("lobby.status.waiting-players", "In attesa di giocatori...");
+        } else {
+            status = plugin.getScoreboardString("lobby.status.waiting-ready", "In attesa dei pronti...");
+        }
+        Map<String, String> values = new HashMap<>();
+        values.put("{arena}", name);
+        values.put("{players}", String.valueOf(players.size()));
+        values.put("{min_players}", String.valueOf(minPlayers));
+        values.put("{max_players}", String.valueOf(maxPlayers));
+        values.put("{ready}", String.valueOf(readyPlayers.size()));
+        values.put("{countdown}", String.valueOf(Math.max(0, lobbyCountdown)));
+        values.put("{status}", replacePlaceholders(status, values));
+        List<String> defaults = List.of("&7--------------------", "&eArena: &f{arena}",
+                "&eGiocatori: &f{players}/{max_players}", "&eMinimo: &f{min_players}",
+                "&ePronti: &f{ready}/{players}", "&eStato: &f{status}", "&7--------------------");
+        addConfiguredLines(b, o, plugin.getScoreboardLines("lobby.lines", defaults), values);
         p.setScoreboard(b);
+    }
+
+    public void refreshLobbyScoreboard() {
+        updateLobbyScoreboard();
     }
 
     private void setupRaceScoreboard(Player p) {
         ScoreboardManager m = Bukkit.getScoreboardManager();
         Scoreboard b = m.getNewScoreboard();
-        Objective o = b.registerNewObjective("IceRace", Criteria.DUMMY, Component.text("§b§lICE BOAT RACING"));
+        Objective o = b.registerNewObjective("IceRace", Criteria.DUMMY,
+                legacy(plugin.getScoreboardString("race.title", "&b&lVoxelKart")));
         o.setDisplaySlot(DisplaySlot.SIDEBAR);
         try {
             o.numberFormat(NumberFormat.blank());
@@ -1481,27 +1567,42 @@ public class RaceArena {
         }
         Team ghost = b.registerNewTeam("ghost");
         ghost.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
-        Utils.createTeam(b, "stats", "§fTempo: 00:00");
-        // Keep a constant minimum width so changing race values do not make the
-        // client repeatedly resize the sidebar. Trailing spaces are invisible but
-        // are still included when Minecraft calculates the scoreboard width.
-        o.getScore("§7--------------------              ").setScore(15);
-        o.getScore("§eStatistiche:").setScore(14);
-        o.getScore("§f").setScore(13);
-        o.getScore(" ").setScore(12);
-        o.getScore("§e§lCLASSIFICA").setScore(11);
-        String[] rankKeys = { "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a" };
-        for (int i = 0; i < 10; i++) {
-            Utils.createTeam(b, "rank_" + (i + 1), "");
-            o.getScore(rankKeys[i]).setScore(10 - i);
-            Team t = b.getTeam("rank_" + (i + 1));
-            if (t != null)
-                t.addEntry(rankKeys[i]);
-        }
-        Team stats = b.getTeam("stats");
-        if (stats != null)
-            stats.addEntry("§f");
+        List<String> defaults = new ArrayList<>(List.of("&7--------------------", "&eStatistiche:",
+                "{stats}", "", "&e&lCLASSIFICA"));
+        for (int i = 1; i <= 10; i++)
+            defaults.add("{ranking_" + i + "}");
+        addConfiguredLines(b, o, plugin.getScoreboardLines("race.lines", defaults), Map.of());
         p.setScoreboard(b);
+    }
+
+    private void addConfiguredLines(Scoreboard board, Objective objective, List<String> configured,
+            Map<String, String> values) {
+        int size = Math.min(15, configured.size());
+        for (int i = 0; i < size; i++) {
+            String line = replacePlaceholders(configured.get(i), values);
+            String teamName = "line_" + i;
+            if (line.equals("{stats}"))
+                teamName = "stats";
+            else if (line.matches("\\{ranking_([1-9]|10)\\}"))
+                teamName = "rank_" + line.substring(9, line.length() - 1);
+            Team team = board.registerNewTeam(teamName);
+            String entry = "§" + Integer.toHexString(i);
+            team.addEntry(entry);
+            if (!line.equals("{stats}") && !line.startsWith("{ranking_"))
+                team.prefix(legacy(line));
+            objective.getScore(entry).setScore(size - i);
+        }
+    }
+
+    private String replacePlaceholders(String input, Map<String, String> values) {
+        String result = input == null ? "" : input;
+        for (Map.Entry<String, String> value : values.entrySet())
+            result = result.replace(value.getKey(), value.getValue());
+        return result;
+    }
+
+    private Component legacy(String text) {
+        return LegacyComponentSerializer.legacyAmpersand().deserialize(text == null ? "" : text);
     }
 
     private void updateRaceScoreboard(Player p, String time, double speed, int cp, int totalCps, int lap, int maxLaps,
@@ -1511,13 +1612,20 @@ public class RaceArena {
         if (stats != null) {
             String statText;
             if (time.equals("SPETTATORE")) {
-                statText = "§bSPETTATORE";
+                statText = plugin.getScoreboardString("race.spectator-stats", "&bSPETTATORE");
             } else {
-                statText = String.format("§f%s §7| §b%.0f km/h §7| §aCP: %d/%d", time, speed, cp, totalCps);
+                statText = plugin.getScoreboardString("race.stats-format",
+                                "&f{time} &7| &b{speed} km/h &7| &aCP: {checkpoint}/{checkpoints}")
+                        .replace("{time}", time)
+                        .replace("{speed}", String.format("%.0f", speed))
+                        .replace("{checkpoint}", String.valueOf(cp))
+                        .replace("{checkpoints}", String.valueOf(totalCps));
                 if (type == RaceType.LAP || type == RaceType.ELIMINATION)
-                    statText += String.format(" §7| §6G%d/%d", lap, maxLaps);
+                    statText += plugin.getScoreboardString("race.lap-format", " &7| &6G{lap}/{laps}")
+                            .replace("{lap}", String.valueOf(lap))
+                            .replace("{laps}", String.valueOf(maxLaps));
             }
-            stats.suffix(Component.text(statText));
+            stats.suffix(legacy(statText));
         }
         UUID leaderUUID = (!ranking.isEmpty()) ? ranking.get(0) : null;
         for (int i = 0; i < 10; i++) {
@@ -1552,7 +1660,7 @@ public class RaceArena {
                         entry = "§c✘ " + pName + " §7(Eliminato)";
                     t.suffix(Component.text(entry));
                 } else {
-                    t.suffix(Component.text("§7---"));
+                    t.suffix(legacy(plugin.getScoreboardString("race.empty-ranking", "&7---")));
                 }
             }
         }
