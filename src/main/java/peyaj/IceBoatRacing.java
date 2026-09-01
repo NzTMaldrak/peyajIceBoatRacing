@@ -582,7 +582,7 @@ public class IceBoatRacing extends JavaPlugin {
         player.setFlying(false);
         player.setAllowFlight(false);
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            viewer.showPlayer(this, player);
+            viewer.showEntity(this, player);
         }
         ensureRaceScoreboardIsGone(player, targetScoreboard);
     }

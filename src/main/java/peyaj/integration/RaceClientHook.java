@@ -6,10 +6,6 @@ import com.github.retrooper.packetevents.event.PacketListenerCommon;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -26,15 +22,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Coordinates the native boat physics implemented by the 26.2 Fabric client mod. */
+/**
+ * Coordinates the optional native boat-physics enhancement supplied by the
+ * Fabric client mod. Vanilla clients can join and race without it.
+ */
 public final class RaceClientHook implements PluginMessageListener, Listener {
 
     public static final String CHANNEL = "iceboatracing:physics";
     public static final int REQUIRED_PROTOCOL = 1;
-    public static final String FABRIC_API_URL = "https://modrinth.com/mod/fabric-api/version/NqwNSxwA";
-    public static final String FABRIC_INSTALLER_URL = "https://fabricmc.net/use/installer/";
-    public static final String CLIENT_MOD_NAME = "IceBoatRacing-Client-1.0.0+26.2.jar";
-    public static final String CLIENT_MOD_URL = "https://raw.githubusercontent.com/realpeyaj/peyajIceBoatRacing/main/downloads/IceBoatRacing-Client-26.2.jar";
 
     private static final byte DISABLE = 0;
     private static final byte ENABLE = 1;
@@ -102,21 +97,11 @@ public final class RaceClientHook implements PluginMessageListener, Listener {
         racePhysics.remove(uuid);
     }
 
-    public boolean canEnterRace(Player player) {
-        Integer protocol = clients.get(player.getUniqueId());
-        if (protocol != null && protocol == REQUIRED_PROTOCOL) {
-            return true;
-        }
-
-        requestVersion(player);
-        showRequirement(player, protocol);
-        return false;
-    }
-
     public void enableRacePhysics(Player player) {
         Integer protocol = clients.get(player.getUniqueId());
         if (protocol == null || protocol != REQUIRED_PROTOCOL) {
-            showRequirement(player, protocol);
+            // Optional enhancement: vanilla clients keep using normal,
+            // server-authoritative boat physics.
             return;
         }
 
@@ -162,31 +147,6 @@ public final class RaceClientHook implements PluginMessageListener, Listener {
         if (player != null && player.isOnline()) {
             send(player, REQUEST_VERSION);
         }
-    }
-
-    private void showRequirement(Player player, Integer protocol) {
-        player.sendMessage(Component.empty());
-        if (protocol == null) {
-            player.sendMessage(Component.text("Per partecipare alla gara serve la mod client IceBoatRacing per Minecraft 26.2.",
-                    NamedTextColor.RED));
-        } else {
-            player.sendMessage(Component.text("La mod client IceBoatRacing non è aggiornata per questo server.",
-                    NamedTextColor.RED));
-        }
-        player.sendMessage(downloadLink("[1] Scarica la mod IceBoatRacing per 26.2", CLIENT_MOD_URL));
-        player.sendMessage(downloadLink("[2] Scarica Fabric API per 26.2", FABRIC_API_URL));
-        player.sendMessage(downloadLink("[3] Installa Fabric Loader 26.2", FABRIC_INSTALLER_URL));
-        player.sendMessage(Component.text("Inserisci " + CLIENT_MOD_NAME + " nella cartella mods del profilo Fabric.",
-                NamedTextColor.YELLOW));
-        player.sendMessage(Component.text("Dopo aver riavviato Minecraft verrà riconosciuta automaticamente.",
-                NamedTextColor.GREEN));
-        player.sendMessage(Component.empty());
-    }
-
-    private Component downloadLink(String label, String url) {
-        return Component.text(label, NamedTextColor.AQUA)
-                .clickEvent(ClickEvent.openUrl(url))
-                .hoverEvent(HoverEvent.showText(Component.text("Clicca per aprire il download", NamedTextColor.GREEN)));
     }
 
     private void send(Player player, byte opcode) {

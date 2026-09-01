@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
@@ -206,6 +207,20 @@ public class RaceListener implements Listener {
                 }
             }
         }
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent e) {
+        Player viewer = e.getPlayer();
+        // Apply plugin-scoped visibility after the join has completed so players
+        // connecting mid-race cannot see existing spectators.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!viewer.isOnline())
+                return;
+            for (RaceArena arena : plugin.getArenas().values()) {
+                arena.syncSpectatorVisibility(viewer);
+            }
+        });
     }
 
     @EventHandler

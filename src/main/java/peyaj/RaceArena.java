@@ -227,6 +227,15 @@ public class RaceArena {
         spectator.getInventory().clear();
         spectator.setGameMode(GameMode.SPECTATOR);
         spectator.setSpectatorTarget(target);
+        // Changing game mode and camera target in the same tick can leave the
+        // client temporarily detached. Re-apply it once after the mode change;
+        // the race tick will then keep the camera attached while the target is valid.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (spectator.isOnline() && target.isOnline()
+                    && target.getUniqueId().equals(spectatorTargets.get(spectator.getUniqueId()))) {
+                spectator.setSpectatorTarget(target);
+            }
+        });
         spectator.sendMessage(Component.text("Stai seguendo " + target.getName()
                 + " in prima persona. Premi SHIFT per tornare al volo libero.", NamedTextColor.AQUA));
     }
@@ -236,6 +245,9 @@ public class RaceArena {
             return;
         spectatorTargets.remove(spectator.getUniqueId());
         spectatorModes.put(spectator.getUniqueId(), SpectatorMode.FREE_FLY);
+        if (spectator.getGameMode() == GameMode.SPECTATOR) {
+            spectator.setSpectatorTarget(null);
+        }
         configureSpectatorControls(spectator);
         giveSpectatorItems(spectator);
         spectator.sendMessage(Component.text("Sei tornato alla modalità spettatore libera.", NamedTextColor.AQUA));
@@ -344,9 +356,6 @@ public class RaceArena {
                     builder -> builder.matchLiteral("{max}").replacement(String.valueOf(maxPlayers))));
             return;
         }
-        if (plugin.raceClientHook == null || !plugin.raceClientHook.canEnterRace(p))
-            return;
-
         plugin.capturePlayerState(p);
         p.getInventory().clear();
         players.add(p.getUniqueId());
@@ -400,10 +409,45 @@ public class RaceArena {
         p.setInvulnerable(true);
         p.setCollidable(false);
         p.setCanPickupItems(false);
+        hideSpectatorFromAll(p);
+    }
+
+    private void hideSpectatorFromAll(Player spectator) {
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (!viewer.getUniqueId().equals(p.getUniqueId())) {
-                viewer.hidePlayer(plugin, p);
-            }
+            hideSpectatorFrom(viewer, spectator);
+        }
+    }
+
+    void hideSpectatorFrom(Player viewer, Player spectator) {
+        if (!viewer.getUniqueId().equals(spectator.getUniqueId())) {
+            // Hide only the world entity. hidePlayer() also removes the player
+            // from the TAB list, which spectators must remain visible in.
+            viewer.hideEntity(plugin, spectator);
+        }
+    }
+
+    /** Hides every spectator in this arena from a player who has just joined. */
+    public void syncSpectatorVisibility(Player viewer) {
+        for (UUID uuid : new HashSet<>(spectators)) {
+            hideCurrentSpectatorFrom(viewer, uuid);
+        }
+        for (UUID uuid : new HashSet<>(finishOrder)) {
+            hideCurrentSpectatorFrom(viewer, uuid);
+        }
+        for (UUID uuid : new HashSet<>(eliminatedPlayers)) {
+            hideCurrentSpectatorFrom(viewer, uuid);
+        }
+    }
+
+    private void hideCurrentSpectatorFrom(Player viewer, UUID uuid) {
+        // Finished players remain in finishOrder for race results even after
+        // leaving spectate. Only hide players still assigned to this arena.
+        if (plugin.getPlayerArena(uuid) != this) {
+            return;
+        }
+        Player spectator = Bukkit.getPlayer(uuid);
+        if (spectator != null && spectator.isOnline()) {
+            hideSpectatorFrom(viewer, spectator);
         }
     }
 
@@ -459,15 +503,11 @@ public class RaceArena {
         if (nextIndex < 0 || nextIndex >= targets.size())
             nextIndex = 0;
         UUID target = targets.get(nextIndex);
-        spectatorTargets.put(spectator.getUniqueId(), target);
-        spectatorModes.put(spectator.getUniqueId(), SpectatorMode.FOLLOW_PLAYER);
-
         Player targetPlayer = Bukkit.getPlayer(target);
         if (targetPlayer != null) {
-            spectator.sendMessage(Component.text("Ora stai seguendo: " + targetPlayer.getName(), NamedTextColor.AQUA));
+            startFirstPersonSpectating(spectator, targetPlayer);
             spectator.playSound(spectator.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1.2f);
         }
-        giveSpectatorItems(spectator);
     }
 
     private void giveLobbyItems(Player p, boolean isTimeTrial) {
@@ -596,6 +636,8 @@ public class RaceArena {
         players.remove(p.getUniqueId());
         readyPlayers.remove(p.getUniqueId());
         eliminatedPlayers.remove(p.getUniqueId());
+        spectatorModes.remove(p.getUniqueId());
+        spectatorTargets.remove(p.getUniqueId());
         // Remove the arena association before destroying the boat, otherwise the
         // dismount listener can cancel an intentional /race leave.
         plugin.removePlayerFromArenaMap(p.getUniqueId());
@@ -926,16 +968,20 @@ public class RaceArena {
 
             List<UUID> ranking = calculateRankings();
 
-            // Return to free-flight controls when POV is cancelled or its target is gone.
+            // Keep POV attached while its target is valid. The client can report a
+            // transient null target just after a mode change or vehicle movement;
+            // treating that as an exit caused the old follow camera to stutter.
             for (Map.Entry<UUID, UUID> entry : new HashMap<>(spectatorTargets).entrySet()) {
                 Player spectator = Bukkit.getPlayer(entry.getKey());
                 Player target = Bukkit.getPlayer(entry.getValue());
                 boolean invalidTarget = target == null || !target.isOnline()
                         || finishOrder.contains(entry.getValue()) || eliminatedPlayers.contains(entry.getValue());
-                boolean detached = spectator != null && spectator.getGameMode() == GameMode.SPECTATOR
-                        && spectator.getSpectatorTarget() == null;
-                if (spectator != null && (invalidTarget || detached)) {
+                if (spectator == null || !spectator.isOnline()) {
+                    spectatorTargets.remove(entry.getKey());
+                } else if (invalidTarget) {
                     stopFirstPersonSpectating(spectator);
+                } else {
+                    maintainFirstPersonSpectating(spectator, target);
                 }
             }
 
@@ -1000,6 +1046,15 @@ public class RaceArena {
                     updateRaceScoreboard(p, "SPETTATORE", 0, 0, checkpoints.size(), 0, totalLaps, ranking);
                 }
             }
+        }
+    }
+
+    void maintainFirstPersonSpectating(Player spectator, Player target) {
+        if (spectator.getGameMode() != GameMode.SPECTATOR) {
+            spectator.setGameMode(GameMode.SPECTATOR);
+        }
+        if (!target.equals(spectator.getSpectatorTarget())) {
+            spectator.setSpectatorTarget(target);
         }
     }
 
