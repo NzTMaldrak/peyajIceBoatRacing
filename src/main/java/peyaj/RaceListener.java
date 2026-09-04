@@ -212,6 +212,9 @@ public class RaceListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent e) {
         Player viewer = e.getPlayer();
+        // A client may reconnect with a sidebar left by an older plugin version.
+        // Clean it up after join, but only while the player remains outside arenas.
+        plugin.scheduleRaceScoreboardCleanup(viewer);
         // Apply plugin-scoped visibility after the join has completed so players
         // connecting mid-race cannot see existing spectators.
         Bukkit.getScheduler().runTask(plugin, () -> {

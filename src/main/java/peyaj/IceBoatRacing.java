@@ -167,6 +167,14 @@ public class IceBoatRacing extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new RaceListener(this), this);
 
+        // A /reload does not fire PlayerJoinEvent. Remove any IceBoat sidebar
+        // left on players that are online but are not currently in an arena.
+        Bukkit.getScheduler().runTask(this, () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                scheduleRaceScoreboardCleanup(player);
+            }
+        });
+
         // Main game tick
         new BukkitRunnable() {
             @Override
@@ -175,6 +183,18 @@ public class IceBoatRacing extends JavaPlugin {
                     arena.tick();
             }
         }.runTaskTimer(this, 0L, 1L);
+
+        // Enforce scoreboard ownership continuously. Event-only cleanup is not
+        // sufficient when a stale client/sidebar survives a reload or when an
+        // arena association becomes inconsistent.
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    clearRaceScoreboardOutsideRaceContext(player);
+                }
+            }
+        }.runTaskTimer(this, 20L, 20L);
 
         // Visualizer tick
         new BukkitRunnable() {
@@ -519,7 +539,7 @@ public class IceBoatRacing extends JavaPlugin {
 
     public RaceArena getPlayerArena(UUID uuid) {
         String name = playerArenaMap.get(uuid);
-        return (name != null) ? arenas.get(name) : null;
+        return (name != null) ? arenas.get(name.toLowerCase(Locale.ROOT)) : null;
     }
 
     public void setPlayerArena(UUID uuid, String arenaName) {
@@ -601,20 +621,37 @@ public class IceBoatRacing extends JavaPlugin {
     private boolean isIceBoatScoreboard(Scoreboard scoreboard) {
         if (scoreboard == null)
             return false;
-        boolean raceBoard = scoreboard.getObjective("IceRace") != null;
-        boolean lobbyBoard = scoreboard.getObjective("Lobby") != null;
-        if (raceBoard || lobbyBoard)
+        if (scoreboard.getObjective("IceRace") != null)
             return true;
+
+        org.bukkit.scoreboard.Objective lobbyObjective = scoreboard.getObjective("Lobby");
+        if (lobbyObjective != null) {
+            String lobbyTitle = normalizedScoreboardTitle(lobbyObjective.displayName());
+            String configuredLobbyTitle = normalizedScoreboardTitle(
+                    LegacyComponentSerializer.legacyAmpersand().deserialize(
+                            getScoreboardString("lobby.title", "&b&lVoxelKart")));
+            if ((!configuredLobbyTitle.isEmpty() && lobbyTitle.equals(configuredLobbyTitle))
+                    || hasLegacyScoreboardTitle(lobbyTitle)) {
+                return true;
+            }
+        }
 
         // Riconosce anche scoreboard create da vecchie versioni del plugin, come
         // quella con titolo "-- Boat Race --".
         for (org.bukkit.scoreboard.Objective objective : scoreboard.getObjectives()) {
-            String title = PlainTextComponentSerializer.plainText().serialize(objective.displayName())
-                    .toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
-            if (title.contains("boatrace") || title.contains("iceboatracing"))
+            if (hasLegacyScoreboardTitle(normalizedScoreboardTitle(objective.displayName())))
                 return true;
         }
         return false;
+    }
+
+    private String normalizedScoreboardTitle(Component title) {
+        return PlainTextComponentSerializer.plainText().serialize(title)
+                .toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
+    }
+
+    private boolean hasLegacyScoreboardTitle(String normalizedTitle) {
+        return normalizedTitle.contains("boatrace") || normalizedTitle.contains("iceboatracing");
     }
 
     private Scoreboard getSafeRestoredScoreboard(Scoreboard scoreboard) {
@@ -623,11 +660,43 @@ public class IceBoatRacing extends JavaPlugin {
                 : scoreboard;
     }
 
+    /**
+     * Removes a stale IceBoat sidebar unless the player is actually in the
+     * pre-lobby, race, or spectator audience of an arena. The context check is
+     * repeated by every delayed pass so joining while cleanup is pending cannot
+     * remove a legitimate scoreboard.
+     */
+    public void scheduleRaceScoreboardCleanup(Player player) {
+        clearRaceScoreboardOutsideRaceContext(player);
+        for (long delay : new long[] { 1L, 10L, 40L }) {
+            Bukkit.getScheduler().runTaskLater(this,
+                    () -> clearRaceScoreboardOutsideRaceContext(player), delay);
+        }
+    }
+
+    private boolean shouldShowRaceScoreboard(UUID uuid) {
+        RaceArena arena = getPlayerArena(uuid);
+        return arena != null && arena.isScoreboardAudience(uuid);
+    }
+
+    private void clearRaceScoreboardOutsideRaceContext(Player player) {
+        if (!player.isOnline() || shouldShowRaceScoreboard(player.getUniqueId()))
+            return;
+        if (isIceBoatScoreboard(player.getScoreboard())) {
+            PlayerSessionData session = playerSessions.get(player.getUniqueId());
+            Scoreboard targetScoreboard = session != null
+                    ? session.getScoreboard()
+                    : Bukkit.getScoreboardManager().getMainScoreboard();
+            player.setScoreboard(getSafeRestoredScoreboard(targetScoreboard));
+        }
+    }
+
     private void ensureRaceScoreboardIsGone(Player player, Scoreboard restoredScoreboard) {
         Scoreboard safeScoreboard = getSafeRestoredScoreboard(restoredScoreboard);
         for (long delay : new long[] { 1L, 10L }) {
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline() && isIceBoatScoreboard(player.getScoreboard())) {
+                if (player.isOnline() && !shouldShowRaceScoreboard(player.getUniqueId())
+                        && isIceBoatScoreboard(player.getScoreboard())) {
                     player.setScoreboard(safeScoreboard);
                 }
             }, delay);

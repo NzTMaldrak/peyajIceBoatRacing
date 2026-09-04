@@ -197,6 +197,20 @@ public class RaceArena {
         return state == RaceState.ACTIVE && players.contains(uuid) && !isSpectator(uuid);
     }
 
+    /**
+     * The plugin sidebar is valid only for real members of this arena: racers in
+     * the pre-lobby/countdown/race and players explicitly watching the race.
+     */
+    public boolean isScoreboardAudience(UUID uuid) {
+        if (spectators.contains(uuid))
+            return true;
+        if (!players.contains(uuid))
+            return false;
+        return state == RaceState.LOBBY
+                || state == RaceState.STARTING
+                || state == RaceState.ACTIVE;
+    }
+
     public List<Player> getSpectatablePlayers() {
         List<Player> result = new ArrayList<>();
         for (UUID uuid : players) {
@@ -1574,6 +1588,9 @@ public class RaceArena {
     }
 
     private void setupLobbyScoreboard(Player p) {
+        if (state != RaceState.LOBBY || !players.contains(p.getUniqueId())
+                || plugin.getPlayerArena(p.getUniqueId()) != this)
+            return;
         ScoreboardManager m = Bukkit.getScoreboardManager();
         Scoreboard b = m.getNewScoreboard();
         Objective o = b.registerNewObjective("Lobby", Criteria.DUMMY,
@@ -1611,6 +1628,9 @@ public class RaceArena {
     }
 
     private void setupRaceScoreboard(Player p) {
+        if (!isScoreboardAudience(p.getUniqueId())
+                || plugin.getPlayerArena(p.getUniqueId()) != this)
+            return;
         ScoreboardManager m = Bukkit.getScoreboardManager();
         Scoreboard b = m.getNewScoreboard();
         Objective o = b.registerNewObjective("IceRace", Criteria.DUMMY,
